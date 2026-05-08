@@ -6,11 +6,11 @@ from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema.runnable import RunnableBranch, RunnablePassthrough, RunnableLambda
 from langchain.schema.messages import HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
+from graph.store import get_related_nodes
 
 def get_llm():
     return ChatOllama(model="llama3.2:3b", temperature=0.2)
 
-#not in retrieve.py
 def classify_intent(question: str) -> str:
     q = question.lower()
     
@@ -70,7 +70,6 @@ One word:
     print(f"[Intent] LLM classified: {intent}")
     return intent
 
-
 def load_vectorstore():
     embeddings = OllamaEmbeddings(model="nomic-embed-text")
     vectorstore_path = "vectorstore1"
@@ -97,32 +96,51 @@ def format_history(history: list) -> list:
 def build_retrieval_chain(vectorstore, mode: str = "default"):
     
     prompts = {
-        "student": """You are a study assistant. Answer using only the context below.
-Use simple language and bullet points where helpful.
-If answer is not in context say: "This isn't in your uploaded documents."
+        "student": """You are helping a student prepare for exams.
+    Give direct, exam-ready answers only from the context below.
+    Use bullet points. Bold key terms.
+    Maximum 150 words unless detail is specifically asked for.
+    If not in context say: "This isn't in your uploaded documents."
 
-Context: {context}
-Question: {question}""",
+    Context: {context}
 
-        "lawyer": """You are a legal research assistant. Answer using only the context below.
-Be precise and formal. Flag any ambiguities.
-If answer is not in context say: "This isn't in your uploaded documents."
+    Question: {question}
 
-Context: {context}
-Question: {question}""",
+    Answer:""",
 
-        "developer": """You are a technical assistant. Answer using only the context below.
-Be precise. Include implementation details if present.
-If answer is not in context say: "This isn't in your uploaded documents."
+        "lawyer": """You are a legal research assistant.
+    Answer precisely and formally using only the context below.
+    Flag ambiguities. Cite specific sections where possible.
+    Maximum 150 words unless detail is specifically asked for.
+    If not in context say: "This isn't in your uploaded documents."
 
-Context: {context}
-Question: {question}""",
+    Context: {context}
+
+    Question: {question}
+
+    Answer:""",
+
+        "developer": """You are a technical assistant.
+    Answer precisely using only the context below.
+    Include implementation details if present in context.
+    Maximum 150 words unless detail is specifically asked for.
+    If not in context say: "This isn't in your uploaded documents."
+
+    Context: {context}
+
+    Question: {question}
+
+    Answer:""",
 
         "default": """Answer using only the context below.
-If answer is not in context say: "This isn't in your uploaded documents."
+    Be clear and concise. Maximum 150 words.
+    If not in context say: "This isn't in your uploaded documents."
 
-Context: {context}
-Question: {question}"""
+    Context: {context}
+
+    Question: {question}
+
+    Answer:"""
     }
 
     prompt = ChatPromptTemplate.from_messages([
@@ -182,69 +200,62 @@ Reply with ONLY one word:
     
     return router_chain
 
-'''def query_rag(question: str, history: list = [], mode: str = "default") -> dict:
-    vectorstore = load_vectorstore()
-    print(f"[Debug] question={question}")
-    print(f"[Debug] history length={len(history)}")
-    print(f"[Debug] first history item={history[0] if history else 'EMPTY'}")
-    if vectorstore is None:
-        return {
-            "answer": "No documents uploaded yet. Please upload a document first.",
-            "sources": [],
-        }
-    
-    formatted_history = format_history(history)
+def resolve_and_classify(question: str, history: list) -> dict:
     llm = get_llm()
     
-    # Step 1 — Route the question
-    if history:
-        print(f"[Debug] History exists, running router...")
-        router_chain = build_router_chain(history)
-        history_str = "\n".join([
-            f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
-            for m in history[-6:]
-        ])
-        print(f"[Debug] Invoking router with question: {question}")
-        decision = router_chain.invoke({
-            "history": history_str,
-            "question": question
-        }).strip().lower()
-        print(f"[Router] Decision: {decision}")
-    else:
-        decision = "retrieve"
-    print(f"[Router] Decision: {decision}")
-    # Step 2 — Route to right chain
-    if decision == "history":
-        history_prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a helpful assistant. Answer based on conversation history only."),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{question}")
-        ])
-        
-        history_chain = history_prompt | llm | StrOutputParser()
-        
-        answer = history_chain.invoke({
-            "history": formatted_history,
-            "question": question
-        })
-        
-        return {
-            "answer": answer,
-            "sources": ["conversation history"],
-        }
+    history_str = "\n".join([
+        f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+        for m in history[-4:]
+    ]) if history else "No history"
     
-    else:
-        retrieval_chain = build_retrieval_chain(vectorstore, mode)
-        
-        result = retrieval_chain.invoke({
-            "question": question,
-            "history": formatted_history,
-        })
-        
-        return {
-            "answer": result["answer"],
-            "sources": result.get("sources", []),
-        }'''
+    prompt = ChatPromptTemplate.from_template("""
+You are an AI assistant. Do two things:
+
+1. Rewrite the question to be fully explicit using history if needed.
+   If already explicit, return it unchanged.
+
+2. Classify the intent as exactly one word:
+   compare / test / summarize / answer
+
+History:
+{history}
+
+Question: {question}
+
+Reply in this exact format:
+RESOLVED: [rewritten question]
+INTENT: [one word]
+""")
+    
+    chain = prompt | llm | StrOutputParser()
+    result = chain.invoke({
+        "history": history_str,
+        "question": question
+    })
+    
+    lines = result.strip().split("\n")
+    resolved = question
+    intent = "answer"
+    
+    for line in lines:
+        if line.startswith("RESOLVED:"):
+            resolved = line.replace("RESOLVED:", "").strip()
+        elif line.startswith("INTENT:"):
+            intent = line.replace("INTENT:", "").strip().lower()
+    
+    # Safety — keyword override
+    q = question.lower()
+    if any(w in q for w in ["compare", "difference", "vs", "versus", "contrast"]):
+        intent = "compare"
+    elif any(w in q for w in ["quiz", "mcq", "test me", "generate questions", "questions on"]):
+        intent = "test"
+    elif any(w in q for w in ["summarize", "summary", "overview", "revise", "revision"]):
+        intent = "summarize"
+    
+    print(f"[Combined] Resolved: {resolved}")
+    print(f"[Combined] Intent: {intent}")
+    
+    return {"resolved": resolved, "intent": intent}
 
 def resolve_context_from_history(question: str, history: list) -> str:
     llm = get_llm()
@@ -274,8 +285,76 @@ Rewritten question:
         "question": question
     }).strip()
 
- 
+def summarize_chain(question: str, vectorstore, mode: str = "default") -> dict:
+    llm = get_llm()
+    
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 8})
+    docs = retriever.get_relevant_documents(question)
+    
+    if not docs:
+        return {
+            "answer": "Nothing relevant found in your documents.",
+            "sources": []
+        }
+    
+    context = "\n\n---\n\n".join([
+        f"[Source: {os.path.basename(doc.metadata.get('source', 'Unknown'))}, Page: {doc.metadata.get('page', '?')}]\n{doc.page_content}"
+        for doc in docs
+    ])
+    
+    sources = list(set([
+        f"{os.path.basename(doc.metadata.get('source', 'Unknown'))} - Page {doc.metadata.get('page', '?')}"\
+        for doc in docs
+    ]))
+    
+    prompts = {
+        "student": """Summarize as exam revision notes using only the context below.
+Group by topic. Use bullet points. Bold key terms.
+Be concise — prioritize high value content only.
+Only use information from the context below.
 
+Context:
+{context}
+
+Request: {question}
+
+Revision Summary:""",
+
+        "lawyer": """Summarize as an executive brief using only the context below.
+Include key points, obligations, and risks.
+Only use information from the context below.
+
+Context:
+{context}
+
+Request: {question}
+
+Executive Brief:""",
+
+        "default": """Summarize clearly and concisely using only the context below.
+Use headers and bullet points where helpful.
+Only use information from the context below.
+
+Context:
+{context}
+
+Request: {question}
+
+Summary:"""
+    }
+    
+    prompt = ChatPromptTemplate.from_template(
+        prompts.get(mode, prompts["default"])
+    )
+    
+    chain = prompt | llm | StrOutputParser()
+    
+    answer = chain.invoke({
+        "context": context,
+        "question": question
+    })
+    
+    return {"answer": answer, "sources": sources}
 
 def comparison_chain(question: str, vectorstore, mode: str = "default") -> dict:
     llm = get_llm()
@@ -411,21 +490,23 @@ def query_rag(question: str, history: list = [], mode: str = "default") -> dict:
     
     formatted_history = format_history(history)
     llm = get_llm()
-    
-    # Step 1 — resolve vague references using history
-    resolved_question = question
+    #step 1+ step 2
     if history:
-        resolved_question = resolve_context_from_history(question, history)
-        print(f"[Resolver] Original: {question}")
-        print(f"[Resolver] Resolved: {resolved_question}")
-    
-    # Step 2 — classify intent on resolved question
-    intent = classify_intent(resolved_question)
-    print(f"[Intent] {intent}")
-    
+        combined = resolve_and_classify(question, history)
+        resolved_question = combined["resolved"]
+        intent = combined["intent"]
+    else:
+        resolved_question = question
+        intent = classify_intent(question)
     # Step 3 — for answer intent check if history can answer directly
+    REFERENCE_WORDS = ["above", "that", "it", "previous", "you mentioned",
+                   "first point", "second point", "elaborate", "expand",
+                   "more detail", "explain more", "go deeper", "what about"]
+
+    needs_router = any(w in resolved_question.lower() for w in REFERENCE_WORDS)
+
     decision = "retrieve"
-    if history and intent == "answer":
+    if history and intent == "answer" and needs_router:
         router_chain = build_router_chain(history)
         history_str = "\n".join([
             f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
@@ -436,23 +517,36 @@ def query_rag(question: str, history: list = [], mode: str = "default") -> dict:
             "question": resolved_question
         }).strip().lower()
         print(f"[Router] Decision: {decision}")
+    else:
+        print(f"[Router] Skipped — no reference words detected")
     
     # Step 4 — route to right chain
     if decision == "history":
-        history_prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a helpful assistant. Answer based on conversation history only."),
-            MessagesPlaceholder(variable_name="history"),
-            ("human", "{question}")
+        # Answer from conversation history using LLM
+        history_str = "\n".join([
+            f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+            for m in history[-6:]
         ])
+        history_prompt = ChatPromptTemplate.from_template("""
+You are a helpful assistant. Answer the question using only the conversation history below.
+Do not make up information. If the answer is not in the history, say so.
+
+Conversation History:
+{history}
+
+Question: {question}
+
+Answer:""")
         history_chain = history_prompt | llm | StrOutputParser()
         answer = history_chain.invoke({
-            "history": formatted_history,
+            "history": history_str,
             "question": resolved_question
         })
         return {
             "answer": answer,
             "sources": ["conversation history"],
-            "intent": intent
+            "intent": intent,
+            "related_concepts": get_related_nodes(resolved_question).get("nodes", [])
         }
     
     elif intent == "compare":
@@ -460,7 +554,8 @@ def query_rag(question: str, history: list = [], mode: str = "default") -> dict:
         return {
             "answer": result["answer"],
             "sources": result["sources"],
-            "intent": intent
+            "intent": intent,
+            "related_concepts": get_related_nodes(resolved_question).get("nodes", [])
         }
     
     elif intent == "test":
@@ -468,7 +563,8 @@ def query_rag(question: str, history: list = [], mode: str = "default") -> dict:
         return {
             "answer": result["answer"],
             "sources": result["sources"],
-            "intent": intent
+            "intent": intent,
+            "related_concepts": get_related_nodes(resolved_question).get("nodes", [])
         }
     
     elif intent == "summarize":
@@ -476,7 +572,8 @@ def query_rag(question: str, history: list = [], mode: str = "default") -> dict:
         return {
             "answer": result["answer"],
             "sources": result["sources"],
-            "intent": intent
+            "intent": intent,
+            "related_concepts": get_related_nodes(resolved_question).get("nodes", [])
         }
     
     else:
@@ -488,5 +585,6 @@ def query_rag(question: str, history: list = [], mode: str = "default") -> dict:
         return {
             "answer": result["answer"],
             "sources": result.get("sources", []),
-            "intent": intent
+            "intent": intent,
+            "related_concepts": get_related_nodes(resolved_question).get("nodes", [])
         }

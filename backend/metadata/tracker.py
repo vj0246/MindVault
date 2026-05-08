@@ -5,13 +5,18 @@ from datetime import datetime
 
 DOCS_FILE = "data/documents.json"
 
-
 def _load_docs() -> list:
     if not os.path.exists(DOCS_FILE):
         return []
-    with open(DOCS_FILE, "r") as f:
-        return json.load(f)
-
+    try:
+        with open(DOCS_FILE, "r") as f:
+            content = f.read().strip()
+            if not content:
+                return []
+            return json.loads(content)
+    except json.JSONDecodeError:
+        _save_docs([])
+        return []
 
 def _save_docs(docs: list):
     with open(DOCS_FILE, "w") as f:
