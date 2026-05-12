@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
+import GraphPanel from '../components/GraphPanel'
 import {
   uploadDocument,
   queryKnowledge,
@@ -10,8 +11,6 @@ import {
   getGraphTopic,
   clearSession,
 } from '../lib/api'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Mode = 'student' | 'lawyer' | 'developer' | 'default'
 type Intent = 'answer' | 'compare' | 'test' | 'summarize'
@@ -42,8 +41,6 @@ interface GraphData {
   edges: { source: string; target: string; relation: string }[]
 }
 
-// ─── Utils ────────────────────────────────────────────────────────────────────
-
 function genId() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
@@ -66,128 +63,6 @@ const SUGGESTIONS = [
   { label: 'Generate 5 MCQs on memory management', intent: 'test' },
 ]
 
-// ─── Graph Panel ──────────────────────────────────────────────────────────────
-
-function GraphPanel({ open, topic, data, loading, onClose, onNodeClick }: {
-  open: boolean
-  topic: string
-  data: GraphData | null
-  loading: boolean
-  onClose: () => void
-  onNodeClick: (id: string) => void
-}) {
-  if (!open) return null
-
-  const cx = 240, cy = 190, radius = 130
-  const pos: Record<string, { x: number; y: number }> = {}
-
-  if (data && data.nodes.length > 0) {
-    data.nodes.forEach((node, i) => {
-      const angle = (i / data.nodes.length) * 2 * Math.PI - Math.PI / 2
-      pos[node.id] = { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) }
-    })
-    const center = data.nodes.find(n => n.id.includes(topic.toLowerCase()))
-    if (center) pos[center.id] = { x: cx, y: cy }
-  }
-
-  return (
-    <div className="fade-up" style={{
-      position: 'fixed', top: 0, right: 0, width: 480, height: '100vh',
-      background: 'var(--surface)', borderLeft: '1px solid var(--border)',
-      zIndex: 50, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-    }}>
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <p style={{ fontFamily: 'Instrument Serif', fontSize: 18, fontStyle: 'italic', color: 'var(--text)' }}>Knowledge Graph</p>
-          <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginTop: 2 }}>topic: {topic}</p>
-        </div>
-        <button onClick={onClose} style={{ color: 'var(--text3)', fontSize: 16, cursor: 'pointer', background: 'none', border: 'none', padding: 4 }}>✕</button>
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, gap: 10 }}>
-            <div className="spinner" />
-            <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>Loading graph...</span>
-          </div>
-        ) : !data || data.nodes.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 300, gap: 8 }}>
-            <p style={{ fontSize: 13, color: 'var(--text2)', textAlign: 'center' }}>No graph data for "{topic}"</p>
-            <p style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'center' }}>Upload more documents to build the graph.</p>
-          </div>
-        ) : (
-          <>
-            <svg width="100%" height="380" viewBox="0 0 480 380"
-              style={{ background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)', display: 'block' }}>
-              {data.edges.map((edge, i) => {
-                const from = pos[edge.source], to = pos[edge.target]
-                if (!from || !to) return null
-                return (
-                  <g key={i}>
-                    <line x1={from.x} y1={from.y} x2={to.x} y2={to.y}
-                      stroke="rgba(232,197,71,0.15)" strokeWidth={1} strokeDasharray="4 2" />
-                    <text x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 5} textAnchor="middle"
-                      style={{ fontSize: 8, fill: 'rgba(232,197,71,0.45)', fontFamily: 'IBM Plex Mono' }}>
-                      {edge.relation}
-                    </text>
-                  </g>
-                )
-              })}
-              {data.nodes.map((node, i) => {
-                const p = pos[node.id]
-                if (!p) return null
-                const isCenter = node.id.includes(topic.toLowerCase())
-                return (
-                  <g key={i} style={{ cursor: 'pointer' }} onClick={() => onNodeClick(node.id)}>
-                    {isCenter && <circle cx={p.x} cy={p.y} r={34} fill="none" stroke="rgba(232,197,71,0.08)" strokeWidth={1} strokeDasharray="3 3" />}
-                    <circle cx={p.x} cy={p.y} r={isCenter ? 30 : 22}
-                      fill={isCenter ? 'rgba(232,197,71,0.12)' : 'rgba(126,184,164,0.08)'}
-                      stroke={isCenter ? 'rgba(232,197,71,0.45)' : 'rgba(126,184,164,0.25)'} strokeWidth={1} />
-                    <text x={p.x} y={p.y} textAnchor="middle" dominantBaseline="middle"
-                      style={{ fontSize: isCenter ? 9 : 8, fill: isCenter ? 'var(--accent)' : 'var(--accent3)', fontFamily: 'IBM Plex Mono', pointerEvents: 'none' }}>
-                      {node.id.length > 13 ? node.id.slice(0, 12) + '…' : node.id}
-                    </text>
-                  </g>
-                )
-              })}
-            </svg>
-
-            <div style={{ marginTop: 16 }}>
-              <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                Nodes ({data.nodes.length}) — click to query
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {data.nodes.map((node, i) => (
-                  <button key={i} className="concept-tag" onClick={() => onNodeClick(node.id)}>{node.id}</button>
-                ))}
-              </div>
-            </div>
-
-            {data.edges.length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                  Relationships ({data.edges.length})
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {data.edges.map((edge, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontFamily: 'IBM Plex Mono', padding: '6px 10px', background: 'var(--surface2)', borderRadius: 5, border: '1px solid var(--border)' }}>
-                      <span style={{ color: 'var(--accent3)' }}>{edge.source}</span>
-                      <span style={{ color: 'var(--text3)' }}>──[{edge.relation}]──▶</span>
-                      <span style={{ color: 'var(--accent2)' }}>{edge.target}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─── Typing Indicator ─────────────────────────────────────────────────────────
-
 function TypingIndicator() {
   return (
     <div className="flex items-start gap-3 fade-up px-1">
@@ -197,7 +72,9 @@ function TypingIndicator() {
       </div>
       <div className="flex items-center gap-1.5 py-3">
         <div className="dot" /><div className="dot" /><div className="dot" />
-        <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginLeft: 6 }}>retrieving from vault</span>
+        <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginLeft: 6 }}>
+          retrieving from vault
+        </span>
       </div>
     </div>
   )
@@ -207,9 +84,10 @@ function IntentPill({ intent }: { intent: string }) {
   return <span className={`intent-pill intent-${intent}`}>{intent}</span>
 }
 
-// ─── Message Bubble ───────────────────────────────────────────────────────────
-
-function MessageBubble({ msg, onConceptClick }: { msg: Message; onConceptClick: (c: string) => void }) {
+function MessageBubble({ msg, onConceptClick }: {
+  msg: Message
+  onConceptClick: (c: string) => void
+}) {
   if (msg.role === 'user') {
     return (
       <div className="flex justify-end fade-up">
@@ -217,7 +95,9 @@ function MessageBubble({ msg, onConceptClick }: { msg: Message; onConceptClick: 
           <div className="msg-user">
             <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text)' }}>{msg.content}</p>
           </div>
-          <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'right', marginTop: 4 }}>{timeStr(msg.timestamp)}</p>
+          <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'right', marginTop: 4 }}>
+            {timeStr(msg.timestamp)}
+          </p>
         </div>
       </div>
     )
@@ -252,13 +132,13 @@ function MessageBubble({ msg, onConceptClick }: { msg: Message; onConceptClick: 
             </div>
           </div>
         )}
-        <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginTop: 6 }}>{timeStr(msg.timestamp)}</p>
+        <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginTop: 6 }}>
+          {timeStr(msg.timestamp)}
+        </p>
       </div>
     </div>
   )
 }
-
-// ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onNewSession, onClearSession }: {
   docs: Doc[]; onUpload: (f: File) => void; uploading: boolean; uploadStatus: string
@@ -278,7 +158,6 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
       </div>
       <div className="divider" />
       <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
-
         <div>
           <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Session</p>
           <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px' }}>
@@ -352,8 +231,6 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
   )
 }
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
-
 function EmptyState({ onSuggest }: { onSuggest: (q: string) => void }) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-8 px-8">
@@ -381,8 +258,6 @@ function EmptyState({ onSuggest }: { onSuggest: (q: string) => void }) {
     </div>
   )
 }
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [sessionId, setSessionId] = useState('')
@@ -484,8 +359,7 @@ export default function Home() {
       }])
       showToast('Backend unreachable', 'error')
     } finally {
-      setLoading(false)
-    }
+      setLoading(false) }
   }, [input, loading, mode, sessionId])
 
   const handleExport = async () => {
@@ -535,7 +409,7 @@ export default function Home() {
             </div>
             <button
               className="mode-tab"
-              onClick={() => handleViewGraph('deadlock')}
+              onClick={() => handleViewGraph('process')}
               style={{ marginLeft: 6, color: 'var(--accent3)', borderColor: 'rgba(126,184,164,0.3)' }}
             >
               ⬡ Graph
@@ -593,7 +467,10 @@ export default function Home() {
       </main>
 
       <GraphPanel
-        open={graphOpen} topic={graphTopic} data={graphData} loading={graphLoading}
+        open={graphOpen}
+        topic={graphTopic}
+        data={graphData}
+        loading={graphLoading}
         onClose={() => setGraphOpen(false)}
         onNodeClick={(id) => { setGraphOpen(false); handleSend(`explain ${id}`) }}
       />
