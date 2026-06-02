@@ -1,55 +1,59 @@
-import json
 import os
 from datetime import datetime
+from supabase import create_client
+from dotenv import load_dotenv
 
+load_dotenv()
 
-DOCS_FILE = "data/documents.json"
+def get_supabase():
+    return create_client(
+        os.environ["SUPABASE_URL"],
+        os.environ["SUPABASE_SERVICE_KEY"]
+    )
 
-def _load_docs() -> list:
-    if not os.path.exists(DOCS_FILE):
-        return []
-    try:
-        with open(DOCS_FILE, "r") as f:
-            content = f.read().strip()
-            if not content:
-                return []
-            return json.loads(content)
-    except json.JSONDecodeError:
-        _save_docs([])
-        return []
-
-def _save_docs(docs: list):
-    with open(DOCS_FILE, "w") as f:
-        json.dump(docs, f, indent=2)
-
-
-def log_document(filename: str, path: str, chunk_count: int):
-    docs = _load_docs()
+def log_document(filename: str, path: str, chunk_count: int, document_id: str) -> str:
+    supabase = get_supabase()
     
-    for doc in docs:
-        if doc["filename"] == filename:
-            doc["chunk_count"] = chunk_count
-            doc["last_updated"] = datetime.utcnow().isoformat()
-            _save_docs(docs)
-            return
+    existing = (
+        supabase.table("documents")
+        .select("id")
+        .eq("filename", filename)
+        .execute()
+    )
     
-    docs.append({
-        "filename": filename,
-        "path": path,
-        "chunk_count": chunk_count,
-        "uploaded_at": datetime.utcnow().isoformat(),
-    })
-    
-    _save_docs(docs)
-
+    if existing.data:
+        # Reuse existing id — return it so chunks reference correct row
+        existing_id = existing.data[0]["id"]
+        supabase.table("documents").update({
+            "chunk_count": chunk_count,
+            "uploaded_at": datetime.utcnow().isoformat()
+        }).eq("filename", filename).execute()
+        return existing_id
+    else:
+        supabase.table("documents").insert({
+            "id": document_id,
+            "filename": filename,
+            "chunk_count": chunk_count,
+            "uploaded_at": datetime.utcnow().isoformat()
+        }).execute()
+        return document_id
 
 def get_all_documents() -> list:
-    return _load_docs()
-
+    supabase = get_supabase()
+    result = (
+        supabase.table("documents")
+        .select("filename, chunk_count, uploaded_at")
+        .order("uploaded_at", desc=True)
+        .execute()
+    )
+    return result.data
 
 def get_document(filename: str) -> dict | None:
-    docs = _load_docs()
-    for doc in docs:
-        if doc["filename"] == filename:
-            return doc
-    return None
+    supabase = get_supabase()
+    result = (
+        supabase.table("documents")
+        .select("*")
+        .eq("filename", filename)
+        .execute()
+    )
+    return result.data[0] if result.data else None

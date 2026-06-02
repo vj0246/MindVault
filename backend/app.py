@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import shutil
 import os
+import uuid
 from rag.ingest import ingest_document
 from rag.retrieve1 import query_rag
 from rag.memory import get_session_history, save_session_message, clear_session
@@ -21,50 +22,46 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Health ───────────────────────────────────────────────────────────────────
-
 @app.get("/")
 def root():
     return {"status": "MindVault is running"}
 
-# ─── Upload ───────────────────────────────────────────────────────────────────
-
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
+        from supabase import create_client
+        sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
+        
         allowed_types = ["application/pdf", "text/plain", "text/markdown"]
-
         if file.content_type not in allowed_types:
-            raise HTTPException(
-                status_code=400,
-                detail="Only PDF, TXT and MD files supported."
-            )
+            raise HTTPException(status_code=400, detail="Only PDF, TXT and MD files supported.")
 
         file_path = f"data/docs/{file.filename}"
-
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        print(f"[Upload] File saved: {file_path}")
-        
-        chunks = ingest_document(file_path)
-        print(f"[Upload] Chunks created: {len(chunks)}")
+        document_id = str(uuid.uuid4())
 
-        log_document(
+        actual_document_id = log_document(
             filename=file.filename,
             path=file_path,
-            chunk_count=len(chunks)
+            chunk_count=0,
+            document_id=document_id
         )
-        print(f"[Upload] Document logged.")
 
-        print(f"[Graph] Building knowledge graph from {min(10, len(chunks))} chunks...")
+        chunks = ingest_document(file_path, document_id=actual_document_id)
+
+        sb.table("documents").update(
+            {"chunk_count": len(chunks)}
+        ).eq("id", actual_document_id).execute()
+
         for chunk in chunks[:10]:
             extracted = extract_entities_and_relations(
-    chunk.page_content,
-    source=file.filename
-)
+                chunk.page_content,
+                source=file.filename
+            )
+            print(f"[Debug] Extracted: {extracted}")
             add_to_graph(extracted)
-        print(f"[Graph] Knowledge graph updated.")
 
         return {
             "message": f"{file.filename} ingested successfully.",
@@ -73,11 +70,14 @@ async def upload_file(file: UploadFile = File(...)):
         }
     except Exception as e:
         import traceback
-        print(f"[Upload ERROR] {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
-
-# ─── Query ────────────────────────────────────────────────────────────────────
+        actual_document_id = log_document(
+            filename=file.filename,
+            path=file_path,
+            chunk_count=0,
+            document_id=document_id
+        )
 
 class QueryRequest(BaseModel):
     question: str
@@ -92,14 +92,9 @@ class ExportRequest(BaseModel):
 def query(req: QueryRequest):
     try:
         if not req.question.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="Question cannot be empty."
-            )
+            raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
         history = get_session_history(req.session_id)
-        print(f"[Debug] Session: {req.session_id}, History: {len(history)}")
-
         result = query_rag(
             question=req.question,
             history=history,
@@ -108,29 +103,23 @@ def query(req: QueryRequest):
 
         save_session_message(req.session_id, role="user", content=req.question)
         save_session_message(req.session_id, role="assistant", content=result["answer"])
-        # Get related graph nodes for the question
-        related = get_related_nodes(req.question.split()[0])
-        
+
         return {
             "answer": result["answer"],
             "sources": result["sources"],
             "mode": req.mode,
             "intent": result.get("intent", "answer"),
-            "related_concepts": related.get("nodes", [])
+            # Use related_concepts from query_rag — already uses resolved question
+            "related_concepts": result.get("related_concepts", [])
         }
     except Exception as e:
         import traceback
-        print(f"[ERROR] {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
-
-# ─── Documents ────────────────────────────────────────────────────────────────
 
 @app.get("/documents")
 def list_documents():
     return {"documents": get_all_documents()}
-
-# ─── Export ───────────────────────────────────────────────────────────────────
 
 @app.post("/export")
 def export_session(req: ExportRequest):
@@ -156,14 +145,11 @@ def export_session(req: ExportRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ─── Session ──────────────────────────────────────────────────────────────────
-
 @app.delete("/session/{session_id}")
 def clear_session_route(session_id: str):
     clear_session(session_id)
     return {"message": f"Session {session_id} cleared."}
 
-# ─── Graph ────────────────────────────────────────────────────────────────────
 @app.get("/graph/{topic}")
 def get_graph_topic(topic: str):
     return get_related_nodes(topic)
@@ -171,8 +157,6 @@ def get_graph_topic(topic: str):
 @app.get("/graph")
 def get_graph_all():
     return get_full_graph()
-
-# ─── Preflight handler ────────────────────────────────────────────────────────
 
 @app.options("/{rest_of_path:path}")
 async def preflight_handler(rest_of_path: str, request: Request):

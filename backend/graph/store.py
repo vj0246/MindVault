@@ -1,49 +1,44 @@
-import json
 import os
-import networkx as nx
-from networkx.readwrite import json_graph
+from supabase import create_client
+from dotenv import load_dotenv
 
-GRAPH_FILE = "data/graph.json"
+load_dotenv()
 
-
-def _load_graph() -> nx.DiGraph:
-    if os.path.exists(GRAPH_FILE):
-        try:
-            with open(GRAPH_FILE, "r") as f:
-                content = f.read().strip()
-                if not content:
-                    return nx.DiGraph()
-                data = json.loads(content)
-            return json_graph.node_link_graph(data, directed=True, edges="links")
-        except Exception:
-            return nx.DiGraph()
-    return nx.DiGraph()
-
-
-def _save_graph(G: nx.DiGraph):
-    data = json_graph.node_link_data(G)
-    with open(GRAPH_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
+def get_supabase():
+    return create_client(
+        os.environ["SUPABASE_URL"],
+        os.environ["SUPABASE_SERVICE_KEY"]
+    )
 
 def add_to_graph(extracted: dict):
-    G = _load_graph()
+    supabase = get_supabase()
     source = extracted.get("source", "unknown")
 
-    # Add entity nodes
     for entity in extracted.get("entities", []):
         entity = entity.lower().strip()
         if not entity:
             continue
-        if not G.has_node(entity):
-            G.add_node(entity, sources=[source])
-        else:
-            existing = G.nodes[entity].get("sources", [])
-            if source not in existing:
-                existing.append(source)
-                G.nodes[entity]["sources"] = existing
 
-    # Add relationship edges
+        existing = (
+            supabase.table("graph_nodes")
+            .select("id, sources")
+            .eq("node_id", entity)
+            .execute()
+        )
+
+        if existing.data:
+            current_sources = existing.data[0].get("sources", [])
+            if source not in current_sources:
+                current_sources.append(source)
+                supabase.table("graph_nodes").update(
+                    {"sources": current_sources}
+                ).eq("node_id", entity).execute()
+        else:
+            supabase.table("graph_nodes").insert({
+                "node_id": entity,
+                "sources": [source]
+            }).execute()
+
     for rel in extracted.get("relationships", []):
         subject = rel.get("subject", "").lower().strip()
         relation = rel.get("relation", "").lower().strip()
@@ -52,83 +47,95 @@ def add_to_graph(extracted: dict):
         if not subject or not relation or not obj:
             continue
 
-        if not G.has_node(subject):
-            G.add_node(subject, sources=[source])
-        if not G.has_node(obj):
-            G.add_node(obj, sources=[source])
+        # Ensure both nodes exist
+        for node in [subject, obj]:
+            exists = (
+                supabase.table("graph_nodes")
+                .select("id")
+                .eq("node_id", node)
+                .execute()
+            )
+            if not exists.data:
+                supabase.table("graph_nodes").insert({
+                    "node_id": node,
+                    "sources": [source]
+                }).execute()
 
-        G.add_edge(subject, obj, relation=relation, source=source)
-
-    _save_graph(G)
-    print(f"[Graph] Nodes: {G.number_of_nodes()}, Edges: {G.number_of_edges()}")
-
+        # Insert edge — ignore if duplicate
+        existing_edge = (
+            supabase.table("graph_edges")
+            .select("id")
+            .eq("source", subject)
+            .eq("target", obj)
+            .execute()
+        )
+        if not existing_edge.data:
+            supabase.table("graph_edges").insert({
+                "source": subject,
+                "target": obj,
+                "relation": relation
+            }).execute()
 
 def get_related_nodes(topic: str, depth: int = 2) -> dict:
-    G = _load_graph()
+    supabase = get_supabase()
     topic_lower = topic.lower().strip()
-
-    # Split into words and try to match any word against node IDs
     topic_words = [w for w in topic_lower.split() if len(w) > 3]
-    
+
+    all_nodes = supabase.table("graph_nodes").select("node_id, sources").execute().data
+    all_edges = supabase.table("graph_edges").select("source, target, relation").execute().data
+
+    # Three tier matching — exact → contains → word by word
     matching = []
-    
-    # First try exact match
-    for node in G.nodes:
-        if topic_lower == node.lower():
-            matching.append(node)
-    
-    # Then try contains match
+    for n in all_nodes:
+        if topic_lower == n["node_id"]:
+            matching.append(n["node_id"])
+
     if not matching:
-        for node in G.nodes:
-            if topic_lower in node.lower() or node.lower() in topic_lower:
-                matching.append(node)
-    
-    # Then try word by word
+        for n in all_nodes:
+            if topic_lower in n["node_id"] or n["node_id"] in topic_lower:
+                matching.append(n["node_id"])
+
     if not matching:
-        for node in G.nodes:
+        for n in all_nodes:
             for word in topic_words:
-                if word in node.lower():
-                    matching.append(node)
+                if word in n["node_id"]:
+                    matching.append(n["node_id"])
                     break
 
     if not matching:
         return {"nodes": [], "edges": []}
 
-    start = matching[0]
-    visited = set([start])
-    current = {start}
+    # BFS to depth
+    visited = {matching[0]}
+    current = {matching[0]}
 
     for _ in range(depth):
         next_level = set()
         for node in current:
-            neighbors = set(G.successors(node)) | set(G.predecessors(node))
-            next_level.update(neighbors)
+            for edge in all_edges:
+                if edge["source"] == node:
+                    next_level.add(edge["target"])
+                if edge["target"] == node:
+                    next_level.add(edge["source"])
         visited.update(next_level)
         current = next_level
 
-    nodes = [{"id": n, "sources": G.nodes[n].get("sources", [])} for n in visited]
+    node_map = {n["node_id"]: n["sources"] for n in all_nodes}
+
+    nodes = [{"id": n, "sources": node_map.get(n, [])} for n in visited]
     edges = [
-        {"source": u, "target": v, "relation": G.edges[u, v].get("relation", "related to")}
-        for u, v in G.edges()
-        if u in visited and v in visited
+        e for e in all_edges
+        if e["source"] in visited and e["target"] in visited
     ]
 
     return {"nodes": nodes, "edges": edges}
 
-
 def get_full_graph() -> dict:
-    G = _load_graph()
+    supabase = get_supabase()
+    nodes = supabase.table("graph_nodes").select("node_id, sources").execute().data
+    edges = supabase.table("graph_edges").select("source, target, relation").execute().data
+
     return {
-        "nodes": [
-            {"id": n, "sources": G.nodes[n].get("sources", [])}
-            for n in G.nodes
-        ],
-        "edges": [
-            {
-                "source": u,
-                "target": v,
-                "relation": G.edges[u, v].get("relation", "related to")
-            }
-            for u, v in G.edges()
-        ]
+        "nodes": [{"id": n["node_id"], "sources": n["sources"]} for n in nodes],
+        "edges": edges
     }

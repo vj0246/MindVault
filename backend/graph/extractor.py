@@ -1,16 +1,20 @@
-from langchain_community.chat_models import ChatOllama
+from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from dotenv import load_dotenv
 import json
 import re
+import os
+
+load_dotenv()
 
 def extract_entities_and_relations(text: str, source: str) -> dict:
-    """
-    Uses LLM to extract both entities and typed relationships from a chunk.
-    Returns dict with entities list and relationships list.
-    """
-    llm = ChatOllama(model="llama3.2:3b", temperature=0)
-    
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        temperature=0,
+        api_key=os.environ["GROQ_API_KEY"]
+    )
+
     prompt = ChatPromptTemplate.from_template("""
 You are a knowledge graph builder. Extract information from the text below.
 
@@ -40,17 +44,17 @@ Text:
 
 JSON only:
 """)
-    
+
     chain = prompt | llm | StrOutputParser()
-    
+
     try:
         result = chain.invoke({"text": text[:800]})
         cleaned = re.sub(r"```json|```", "", result).strip()
         data = json.loads(cleaned)
-        
+
         entities = data.get("entities", [])
         relationships = data.get("relationships", [])
-        
+
         print(f"[Extractor] Found {len(entities)} entities, {len(relationships)} relationships")
         return {
             "entities": entities,
