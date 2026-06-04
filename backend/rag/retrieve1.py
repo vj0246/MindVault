@@ -10,11 +10,6 @@ from graph.store import get_related_nodes
 from dotenv import load_dotenv
 
 load_dotenv()
-
-#EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
-from fastembed import TextEmbedding
-def get_embed_model():
-    return TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
     
 def get_supabase():
     return create_client(
@@ -29,10 +24,14 @@ def get_llm():
     )
 
 
+from fastembed import TextEmbedding
+
+EMBED_MODEL = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
+
 def retrieve_context(question: str, k: int = 5) -> dict:
     supabase = get_supabase()
-    embed_model = get_embed_model()
-    embedding = list(embed_model.embed([question]))[0].tolist()
+    embedding = list(EMBED_MODEL.embed([question]))[0].tolist()
+    
     result = supabase.rpc("match_chunks", {
         "query_embedding": embedding,
         "match_count": k
