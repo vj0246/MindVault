@@ -1,18 +1,22 @@
 import os
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from sentence_transformers import SentenceTransformer
+from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
 from supabase import create_client
 from dotenv import load_dotenv
 
 load_dotenv()
-os.environ["SENTENCE_TRANSFORMERS_HOME"] = "C:/sentence_transformers_cache"
-EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 
 def get_supabase():
     return create_client(
         os.environ["SUPABASE_URL"],
         os.environ["SUPABASE_SERVICE_KEY"]
+    )
+
+def get_embed_model():
+    return HuggingFaceInferenceAPIEmbeddings(
+        api_key=os.environ["HF_API_KEY"],
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
 def load_pdf(file_path: str):
@@ -29,25 +33,32 @@ def chunk_documents(pages, chunk_size=500, chunk_overlap=50):
 
 def embed_and_store(chunks, document_id: str, filename: str):
     supabase = get_supabase()
+    embed_model = get_embed_model()
+    
     texts = [chunk.page_content for chunk in chunks]
-    embeddings = EMBED_MODEL.encode(texts, show_progress_bar=True)
-
+    
+    # HuggingFace API — embed in batches of 50
+    all_embeddings = []
+    batch_size = 50
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i+batch_size]
+        embeddings = embed_model.embed_documents(batch)
+        all_embeddings.extend(embeddings)
+    
     rows = []
-    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+    for i, (chunk, embedding) in enumerate(zip(chunks, all_embeddings)):
         rows.append({
             "document_id": document_id,
             "content": chunk.page_content,
-            "embedding": embedding.tolist(),
+            "embedding": embedding,
             "chunk_index": i,
             "filename": filename
         })
 
-    batch_size = 50
     for i in range(0, len(rows), batch_size):
         supabase.table("chunks").insert(rows[i:i+batch_size]).execute()
 
-    print(f"[Ingest] Stored {len(rows)} chunks in Supabase")  
-
+    print(f"[Ingest] Stored {len(rows)} chunks in Supabase")
 
 def ingest_document(file_path: str, document_id: str, chunk_size=500, chunk_overlap=50):
     print(f"[Ingest] Loading: {file_path}")
