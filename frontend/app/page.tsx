@@ -56,12 +56,18 @@ const MODES: { value: Mode; label: string; desc: string }[] = [
   { value: 'default',   label: 'Default',   desc: 'Balanced responses' },
 ]
 
-const SUGGESTIONS = [
-  { label: 'What is deadlock?',                    intent: 'answer' },
-  { label: 'Compare mutex and semaphore',           intent: 'compare' },
-  { label: 'Summarize scheduling algorithms',       intent: 'summarize' },
-  { label: 'Generate 5 MCQs on memory management', intent: 'test' },
-]
+function getDynamicSuggestions(docs: Doc[]) {
+  if (docs.length === 0) return []
+  const names = docs.map(d => d.filename.replace(/\.[^.]+$/, '').slice(0, 30))
+  return [
+    { label: `Summarize ${names[0]}`, intent: 'summarize' },
+    { label: `Generate MCQs from ${names[0]}`, intent: 'test' },
+    { label: `What are the key concepts in ${names[0]}?`, intent: 'answer' },
+    docs.length > 1
+      ? { label: `Compare ${names[0]} and ${names[1]}`, intent: 'compare' }
+      : { label: `Explain the main topics in ${names[0]}`, intent: 'answer' },
+  ]
+}
 
 function TypingIndicator() {
   return (
@@ -140,121 +146,144 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onNewSession, onClearSession }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onNewSession, onClearSession, open, onClose }: {
   docs: Doc[]; onUpload: (f: File) => void; uploading: boolean; uploadStatus: string
-  sessionId: string; msgCount: number; onExport: () => void; onNewSession: () => void; onClearSession: () => void
+  sessionId: string; msgCount: number; onExport: () => void; onNewSession: () => void
+  onClearSession: () => void; open: boolean; onClose: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
 
   return (
-    <aside className="sidebar">
-      <div className="flex items-center gap-3 p-5 pb-4">
-        <div className="logo-mark">M</div>
-        <div>
-          <h1 style={{ fontFamily: 'Instrument Serif', fontSize: 18, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1 }}>MindVault</h1>
-          <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginTop: 2 }}>knowledge · retrieved</p>
-        </div>
-      </div>
-      <div className="divider" />
-      <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
-        <div>
-          <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Session</p>
-          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px' }}>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="status-dot" />
-              <span style={{ fontSize: 10, color: 'var(--accent3)', fontFamily: 'IBM Plex Mono' }}>Active</span>
-            </div>
-            <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', wordBreak: 'break-all' }}>
-              {sessionId ? sessionId.slice(0, 20) + '...' : 'Loading...'}
-            </p>
-            <p style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4, fontFamily: 'IBM Plex Mono' }}>{msgCount} messages</p>
-          </div>
-        </div>
+    <>
+      {/* Mobile overlay */}
+      {open && (
+        <div className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={onClose} />
+      )}
 
-        <div>
-          <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Upload Document</p>
-          <div
-            className={`upload-zone ${dragging ? 'drag-over' : ''}`}
-            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) onUpload(f) }}
-            onClick={() => !uploading && fileRef.current?.click()}
-          >
-            {uploading ? (
-              <div className="flex flex-col items-center gap-2 py-2">
-                <div className="spinner" />
-                <p style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'IBM Plex Mono' }}>{uploadStatus}</p>
+      <aside className={`sidebar fixed md:relative z-50 md:z-auto transition-transform duration-300
+        ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <div className="flex items-center justify-between gap-3 p-5 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="logo-mark">M</div>
+            <div>
+              <h1 style={{ fontFamily: 'Instrument Serif', fontSize: 18, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1 }}>MindVault</h1>
+              <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginTop: 2 }}>knowledge · retrieved</p>
+            </div>
+          </div>
+          <button className="md:hidden" onClick={onClose}
+            style={{ color: 'var(--text3)', fontSize: 18, padding: 4 }}>✕</button>
+        </div>
+        <div className="divider" />
+        <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
+          <div>
+            <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Session</p>
+            <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px' }}>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="status-dot" />
+                <span style={{ fontSize: 10, color: 'var(--accent3)', fontFamily: 'IBM Plex Mono' }}>Active</span>
               </div>
+              <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', wordBreak: 'break-all' }}>
+                {sessionId ? sessionId.slice(0, 20) + '...' : 'Loading...'}
+              </p>
+              <p style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4, fontFamily: 'IBM Plex Mono' }}>{msgCount} messages</p>
+            </div>
+          </div>
+
+          <div>
+            <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Upload Document</p>
+            <div
+              className={`upload-zone ${dragging ? 'drag-over' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) onUpload(f) }}
+              onClick={() => !uploading && fileRef.current?.click()}
+            >
+              {uploading ? (
+                <div className="flex flex-col items-center gap-2 py-2">
+                  <div className="spinner" />
+                  <p style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'IBM Plex Mono' }}>{uploadStatus}</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-1 py-2">
+                  <span style={{ fontSize: 22, marginBottom: 2 }}>📄</span>
+                  <p style={{ fontSize: 12, color: 'var(--text2)' }}>Drop file or click</p>
+                  <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>PDF · TXT · MD</p>
+                </div>
+              )}
+            </div>
+            <input ref={fileRef} type="file" accept=".pdf,.txt,.md" className="hidden"
+              onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
+          </div>
+
+          <div className="flex-1">
+            <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+              Knowledge Base ({docs.length})
+            </p>
+            {docs.length === 0 ? (
+              <p style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: '16px 0' }}>No documents yet</p>
             ) : (
-              <div className="flex flex-col items-center gap-1 py-2">
-                <span style={{ fontSize: 22, marginBottom: 2 }}>📄</span>
-                <p style={{ fontSize: 12, color: 'var(--text2)' }}>Drop file or click</p>
-                <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>PDF · TXT · MD</p>
+              <div className="flex flex-col gap-1">
+                {docs.map((doc, i) => (
+                  <div key={i} className="doc-item fade-up">
+                    <span style={{ fontSize: 13, flexShrink: 0 }}>📄</span>
+                    <div className="flex-1 min-w-0">
+                      <p style={{ fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</p>
+                      <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>
+                        {doc.chunk_count} chunks · {new Date(doc.uploaded_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
-          <input ref={fileRef} type="file" accept=".pdf,.txt,.md" className="hidden"
-            onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
-        </div>
 
-        <div className="flex-1">
-          <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-            Knowledge Base ({docs.length})
-          </p>
-          {docs.length === 0 ? (
-            <p style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: '16px 0' }}>No documents yet</p>
-          ) : (
-            <div className="flex flex-col gap-1">
-              {docs.map((doc, i) => (
-                <div key={i} className="doc-item fade-up">
-                  <span style={{ fontSize: 13, flexShrink: 0 }}>📄</span>
-                  <div className="flex-1 min-w-0">
-                    <p style={{ fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</p>
-                    <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>
-                      {doc.chunk_count} chunks · {new Date(doc.uploaded_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            <button className="action-btn" onClick={onExport}>↓ Export Session</button>
+            <button className="action-btn" onClick={onNewSession}>+ New Session</button>
+            <button className="action-btn danger" onClick={onClearSession}>✕ Clear History</button>
+          </div>
         </div>
-
-        <div className="flex flex-col gap-2">
-          <button className="action-btn" onClick={onExport}>↓ Export Session</button>
-          <button className="action-btn" onClick={onNewSession}>+ New Session</button>
-          <button className="action-btn danger" onClick={onClearSession}>✕ Clear History</button>
-        </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   )
 }
 
-function EmptyState({ onSuggest }: { onSuggest: (q: string) => void }) {
+function EmptyState({ onSuggest, docs }: { onSuggest: (q: string) => void; docs: Doc[] }) {
+  const suggestions = getDynamicSuggestions(docs)
+
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-8 px-8">
+    <div className="flex flex-col items-center justify-center h-full gap-8 px-6">
       <div className="text-center">
-        <p style={{ fontFamily: 'Instrument Serif', fontSize: 40, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1.1, marginBottom: 10 }}>
+        <p style={{ fontFamily: 'Instrument Serif', fontSize: 36, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1.1, marginBottom: 10 }}>
           What do you want<br />to know?
         </p>
         <p style={{ fontSize: 14, color: 'var(--text3)', lineHeight: 1.6 }}>
-          Ask anything from your uploaded documents.<br />Your knowledge, instantly retrieved.
+          {docs.length === 0
+            ? 'Upload a document to get started.'
+            : 'Ask anything from your uploaded documents.'}
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-2 w-full max-w-lg">
-        {SUGGESTIONS.map((s, i) => (
-          <button key={i} className="suggestion fade-up" style={{ animationDelay: `${i * 0.08}s` }} onClick={() => onSuggest(s.label)}>
-            <span className={`intent-pill intent-${s.intent}`} style={{ display: 'inline-block', marginBottom: 6 }}>{s.intent}</span>
-            <p style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5, marginTop: 4 }}>{s.label}</p>
-          </button>
-        ))}
-      </div>
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, width: '100%', maxWidth: 480 }}>
-        <p style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'center', lineHeight: 1.6 }}>
-          Upload documents first · Then ask anything · Zero data leaves your machine
-        </p>
-      </div>
+
+      {suggestions.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 w-full max-w-lg">
+          {suggestions.map((s, i) => (
+            <button key={i} className="suggestion fade-up" style={{ animationDelay: `${i * 0.08}s` }} onClick={() => onSuggest(s.label)}>
+              <span className={`intent-pill intent-${s.intent}`} style={{ display: 'inline-block', marginBottom: 6 }}>{s.intent}</span>
+              <p style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5, marginTop: 4 }}>{s.label}</p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {docs.length === 0 && (
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, width: '100%', maxWidth: 480 }}>
+          <p style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'center', lineHeight: 1.6 }}>
+            Upload · Ask · Learn
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -273,6 +302,7 @@ export default function Home() {
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [graphTopic, setGraphTopic] = useState('')
   const [graphLoading, setGraphLoading] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -354,12 +384,13 @@ export default function Home() {
     } catch {
       setMessages(prev => [...prev, {
         id: genId(), role: 'assistant',
-        content: 'Failed to reach MindVault backend. Make sure the server is running on port 8000.',
+        content: 'Could not reach MindVault. Please try again.',
         timestamp: new Date().toISOString(),
       }])
       showToast('Backend unreachable', 'error')
     } finally {
-      setLoading(false) }
+      setLoading(false)
+    }
   }, [input, loading, mode, sessionId])
 
   const handleExport = async () => {
@@ -393,15 +424,20 @@ export default function Home() {
         docs={docs} onUpload={handleUpload} uploading={uploading} uploadStatus={uploadStatus}
         sessionId={sessionId} msgCount={messages.length}
         onExport={handleExport} onNewSession={handleNewSession} onClearSession={handleClearSession}
+        open={sidebarOpen} onClose={() => setSidebarOpen(false)}
       />
 
-      <main className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--bg)' }}>
         {/* Top bar */}
-        <div className="flex items-center justify-between px-6 py-3"
+        <div className="flex items-center justify-between px-4 py-3"
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
           <div className="flex items-center gap-2">
+            {/* Hamburger — mobile only */}
+            <button className="md:hidden mr-2 p-1"
+              style={{ color: 'var(--text3)', fontSize: 18 }}
+              onClick={() => setSidebarOpen(true)}>☰</button>
             <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mode</span>
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {MODES.map(m => (
                 <button key={m.value} className={`mode-tab ${mode === m.value ? 'active' : ''}`}
                   onClick={() => setMode(m.value)} title={m.desc}>{m.label}</button>
@@ -415,7 +451,7 @@ export default function Home() {
               ⬡ Graph
             </button>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="status-dot" />
               <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>
@@ -423,16 +459,16 @@ export default function Home() {
               </span>
             </div>
             <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
-            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>Local AI · Zero egress</span>
+            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>Powered by MindVault</span>
           </div>
         </div>
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto" style={{ padding: '24px 0' }}>
           {messages.length === 0 ? (
-            <EmptyState onSuggest={(q) => handleSend(q)} />
+            <EmptyState onSuggest={(q) => handleSend(q)} docs={docs} />
           ) : (
-            <div className="flex flex-col gap-6 max-w-3xl mx-auto px-6">
+            <div className="flex flex-col gap-6 max-w-3xl mx-auto px-4 md:px-6">
               {messages.map(msg => (
                 <MessageBubble key={msg.id} msg={msg} onConceptClick={handleViewGraph} />
               ))}
@@ -443,12 +479,12 @@ export default function Home() {
         </div>
 
         {/* Input */}
-        <div style={{ borderTop: '1px solid var(--border)', padding: '16px 24px', background: 'var(--bg)' }}>
-          <div className="flex gap-3 items-end max-w-3xl mx-auto">
+        <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px', background: 'var(--bg)' }}>
+          <div className="flex gap-2 items-end max-w-3xl mx-auto">
             <div className="flex-1">
               <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask your vault anything... (Shift+Enter for new line)"
+                placeholder="Ask your vault anything..."
                 rows={1} className="vault-input" style={{ minHeight: 46, maxHeight: 140 }}
                 onInput={(e) => {
                   const t = e.target as HTMLTextAreaElement
@@ -460,8 +496,8 @@ export default function Home() {
               {loading ? <div className="spinner" style={{ width: 14, height: 14 }} /> : '→'}
             </button>
           </div>
-          <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'center', marginTop: 10, letterSpacing: '0.03em' }}>
-            Answers grounded strictly in your documents · Powered by local AI · 100% private
+          <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'center', marginTop: 8, letterSpacing: '0.03em' }}>
+            Answers grounded in your documents · Encrypted · Private
           </p>
         </div>
       </main>
