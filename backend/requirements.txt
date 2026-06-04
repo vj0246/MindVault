@@ -10,5 +10,4 @@ pypdf
 python-dotenv
 pydantic
 supabase
-sentence-transformers
 groq
