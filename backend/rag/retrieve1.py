@@ -22,8 +22,7 @@ def get_embed_model():
         api_key=os.environ["HF_API_KEY"],
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
-    )
-
+    
 def get_supabase():
     return create_client(
         os.environ["SUPABASE_URL"],
