@@ -25,21 +25,19 @@ app.add_middleware(
 @app.get("/")
 def root():
     return {"status": "MindVault is running"}
-
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
-        from supabase import create_client
-        sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
-        
         allowed_types = ["application/pdf", "text/plain", "text/markdown"]
         if file.content_type not in allowed_types:
             raise HTTPException(status_code=400, detail="Only PDF, TXT and MD files supported.")
 
+        # Create folder if not exists — required on Render
+        os.makedirs("data/docs", exist_ok=True)
+
         file_path = f"data/docs/{file.filename}"
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-
         document_id = str(uuid.uuid4())
 
         actual_document_id = log_document(
