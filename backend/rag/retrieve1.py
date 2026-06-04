@@ -1,5 +1,5 @@
 import os
-from sentence_transformers import SentenceTransformer
+#from sentence_transformers import SentenceTransformer
 from supabase import create_client
 from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -11,7 +11,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+#EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+
+# ADD this
+from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+import numpy as np
+
+def get_embed_model():
+    return HuggingFaceInferenceAPIEmbeddings(
+        api_key=os.environ["HF_API_KEY"],
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
+    )
 
 def get_supabase():
     return create_client(
@@ -24,9 +35,12 @@ def get_llm():
         temperature=0.2,
         api_key=os.environ["GROQ_API_KEY"]
     )
+
+
 def retrieve_context(question: str, k: int = 5) -> dict:
     supabase = get_supabase()
-    embedding = EMBED_MODEL.encode(question).tolist()
+    embed_model = get_embed_model()
+    embedding = embed_model.embed_query(question)
     
     result = supabase.rpc("match_chunks", {
         "query_embedding": embedding,
@@ -34,12 +48,10 @@ def retrieve_context(question: str, k: int = 5) -> dict:
     }).execute()
     
     chunks = result.data or []
-    
     if not chunks:
         return {"context": "", "sources": []}
     
     context = "\n\n---\n\n".join([c["content"] for c in chunks])
-    # Supabase chunks have no metadata — sources come from documents table
     sources = list(set([c.get("filename", "Uploaded Document") for c in chunks]))
     
     return {"context": context, "sources": sources}
