@@ -12,16 +12,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 #EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
-
-# ADD this
-from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
-import numpy as np
-
+from fastembed import TextEmbedding
 def get_embed_model():
-    return HuggingFaceInferenceAPIEmbeddings(
-        api_key=os.environ["HF_API_KEY"],
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    return TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
     
 def get_supabase():
     return create_client(
@@ -39,8 +32,7 @@ def get_llm():
 def retrieve_context(question: str, k: int = 5) -> dict:
     supabase = get_supabase()
     embed_model = get_embed_model()
-    embedding = embed_model.embed_query(question)
-    
+    embedding = list(embed_model.embed([question]))[0].tolist()
     result = supabase.rpc("match_chunks", {
         "query_embedding": embedding,
         "match_count": k

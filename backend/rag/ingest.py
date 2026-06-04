@@ -36,9 +36,8 @@ def embed_and_store(chunks, document_id: str, filename: str):
     embed_model = get_embed_model()
     
     texts = [chunk.page_content for chunk in chunks]
-    
-    # HuggingFace API — embed in batches of 50
-    all_embeddings = []
+    all_embeddings = list(embed_model.embed(texts))
+    embedding = emb.tolist()
     batch_size = 50
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i+batch_size]
