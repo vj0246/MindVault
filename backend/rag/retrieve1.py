@@ -28,22 +28,26 @@ from fastembed import TextEmbedding
 
 EMBED_MODEL = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
 
-def retrieve_context(question: str, k: int = 5) -> dict:
+def retrieve_context(question: str, k: int = 5, user_id: str = None) -> dict:
     supabase = get_supabase()
     embedding = list(EMBED_MODEL.embed([question]))[0].tolist()
     
-    result = supabase.rpc("match_chunks", {
+    params = {
         "query_embedding": embedding,
-        "match_count": k
-    }).execute()
-    
+        "match_count": k,
+        "similarity_threshold": 0.3
+    }
+    if user_id:
+        params["p_user_id"] = user_id
+
+    result = supabase.rpc("match_chunks", params).execute()
     chunks = result.data or []
     if not chunks:
         return {"context": "", "sources": []}
-    
+
     context = "\n\n---\n\n".join([c["content"] for c in chunks])
     sources = list(set([c.get("filename", "Uploaded Document") for c in chunks]))
-    
+
     return {"context": context, "sources": sources}
 
 def format_history(history: list) -> list:
@@ -164,7 +168,7 @@ Reply with ONLY one word:
 """)
     return router_prompt | llm | StrOutputParser()
 
-def build_retrieval_chain(mode: str = "default"):
+def build_retrieval_chain(mode: str = "default", user_id: str = None):
     prompts = {
         "student": """You are helping a student prepare for exams.
 Give direct, exam-ready answers only from the context below.
@@ -175,7 +179,6 @@ If not in context say: "This isn't in your uploaded documents."
 Context: {context}
 Question: {question}
 Answer:""",
-
         "lawyer": """You are a legal research assistant.
 Answer precisely and formally using only the context below.
 Flag ambiguities. Cite specific sections where possible.
@@ -185,7 +188,6 @@ If not in context say: "This isn't in your uploaded documents."
 Context: {context}
 Question: {question}
 Answer:""",
-
         "developer": """You are a technical assistant.
 Answer precisely using only the context below.
 Include implementation details if present in context.
@@ -195,7 +197,6 @@ If not in context say: "This isn't in your uploaded documents."
 Context: {context}
 Question: {question}
 Answer:""",
-
         "default": """Answer using only the context below.
 Be clear and concise. Maximum 150 words.
 If not in context say: "This isn't in your uploaded documents."
@@ -214,7 +215,7 @@ Answer:"""
     llm = get_llm()
 
     def run_chain(input: dict) -> dict:
-        retrieved = retrieve_context(input["question"], k=5)
+        retrieved = retrieve_context(input["question"], k=5, user_id=user_id)
         result = (prompt | llm | StrOutputParser()).invoke({
             "context": retrieved["context"],
             "question": input["question"],
@@ -224,9 +225,9 @@ Answer:"""
 
     return run_chain
 
-def summarize_chain(question: str, mode: str = "default") -> dict:
+def summarize_chain(question: str, mode: str = "default", user_id: str = None) -> dict:
     llm = get_llm()
-    retrieved = retrieve_context(question, k=8)
+    retrieved = retrieve_context(question, k=8, user_id=user_id)
     if not retrieved["context"]:
         return {"answer": "Nothing relevant found in your documents.", "sources": []}
 
@@ -249,9 +250,9 @@ Context:\n{context}\nRequest: {question}\nSummary:"""
     })
     return {"answer": answer, "sources": retrieved["sources"]}
 
-def comparison_chain(question: str, mode: str = "default") -> dict:
+def comparison_chain(question: str, mode: str = "default", user_id: str = None) -> dict:
     llm = get_llm()
-    retrieved = retrieve_context(question, k=8)
+    retrieved = retrieve_context(question, k=8, user_id=user_id)
     if not retrieved["context"]:
         return {"answer": "Nothing relevant found in your documents.", "sources": []}
 
@@ -276,9 +277,9 @@ Context:\n{context}\nComparison request: {question}\nComparison:
     })
     return {"answer": answer, "sources": retrieved["sources"]}
 
-def test_generator_chain(question: str) -> dict:
+def test_generator_chain(question: str, user_id: str = None) -> dict:
     llm = get_llm()
-    retrieved = retrieve_context(question, k=8)
+    retrieved = retrieve_context(question, k=8, user_id=user_id)
     if not retrieved["context"]:
         return {"answer": "Nothing relevant found in your documents.", "sources": []}
 
@@ -304,12 +305,14 @@ Content:\n{context}\nTopic: {question}\nQuestions:
     })
     return {"answer": answer, "sources": retrieved["sources"]}
 
-def query_rag(question: str, history: list = [], mode: str = "default") -> dict:
+def query_rag(question: str, history: list = [], mode: str = "default", user_id: str = None) -> dict:
     print(f"[Debug] question={question}, history={len(history)}")
 
-    # Check if any chunks exist in Supabase
     supabase = get_supabase()
-    check = supabase.table("chunks").select("id").limit(1).execute()
+    check = supabase.table("chunks").select("id")\
+        .eq("user_id", user_id).limit(1).execute() if user_id else \
+        supabase.table("chunks").select("id").limit(1).execute()
+    
     if not check.data:
         return {
             "answer": "No documents uploaded yet. Please upload a document first.",
@@ -367,17 +370,17 @@ Answer:""")
             "answer": answer,
             "sources": ["conversation history"],
             "intent": intent,
-            "related_concepts": get_related_nodes(resolved_question).get("nodes", [])
+            "related_concepts": get_related_nodes(resolved_question, user_id=user_id).get("nodes", [])
         }
 
     elif intent == "compare":
-        result = comparison_chain(resolved_question, mode)
+        result = comparison_chain(resolved_question, mode, user_id=user_id)
     elif intent == "test":
-        result = test_generator_chain(resolved_question)
+        result = test_generator_chain(resolved_question, user_id=user_id)
     elif intent == "summarize":
-        result = summarize_chain(resolved_question, mode)
+        result = summarize_chain(resolved_question, mode, user_id=user_id)
     else:
-        chain_fn = build_retrieval_chain(mode)
+        chain_fn = build_retrieval_chain(mode, user_id=user_id)
         result = chain_fn({
             "question": resolved_question,
             "history": formatted_history
@@ -387,5 +390,5 @@ Answer:""")
         "answer": result["answer"],
         "sources": result["sources"],
         "intent": intent,
-        "related_concepts": get_related_nodes(resolved_question).get("nodes", [])
+        "related_concepts": get_related_nodes(resolved_question, user_id=user_id).get("nodes", [])
     }

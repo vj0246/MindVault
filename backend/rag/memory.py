@@ -11,29 +11,34 @@ def get_supabase():
         os.environ["SUPABASE_SERVICE_KEY"]
     )
 
-def get_session_history(session_id: str) -> list:
+def get_session_history(session_id: str, user_id: str) -> list:
     supabase = get_supabase()
     result = (
         supabase.table("sessions")
         .select("role, content, timestamp")
         .eq("session_id", session_id)
+        .eq("user_id", user_id)
         .order("timestamp")
         .execute()
     )
     return result.data
 
-def save_session_message(session_id: str, role: str, content: str):
+def save_session_message(session_id: str, role: str, content: str, user_id: str):
     supabase = get_supabase()
     supabase.table("sessions").insert({
         "session_id": session_id,
         "role": role,
         "content": content,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
+        "user_id": user_id
     }).execute()
 
-def clear_session(session_id: str):
+def clear_session(session_id: str, user_id: str):
     supabase = get_supabase()
-    supabase.table("sessions").delete().eq("session_id", session_id).execute()
+    supabase.table("sessions").delete()\
+        .eq("session_id", session_id)\
+        .eq("user_id", user_id)\
+        .execute()
 
 def get_history_for_prompt(history: list, llm) -> str:
     if len(history) <= 6:

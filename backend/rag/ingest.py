@@ -27,10 +27,9 @@ def chunk_documents(pages, chunk_size=500, chunk_overlap=50):
     )
     return splitter.split_documents(pages)
 
-def embed_and_store(chunks, document_id: str, filename: str):
+def embed_and_store(chunks, document_id: str, filename: str, user_id: str):
     supabase = get_supabase()
     texts = [chunk.page_content for chunk in chunks]
-    
     all_embeddings = list(EMBED_MODEL.embed(texts))
 
     rows = []
@@ -41,7 +40,8 @@ def embed_and_store(chunks, document_id: str, filename: str):
             "content": chunk.page_content,
             "embedding": embedding.tolist(),
             "chunk_index": i,
-            "filename": filename
+            "filename": filename,
+            "user_id": user_id
         })
 
     for i in range(0, len(rows), batch_size):
@@ -49,7 +49,7 @@ def embed_and_store(chunks, document_id: str, filename: str):
 
     print(f"[Ingest] Stored {len(rows)} chunks in Supabase")
 
-def ingest_document(file_path: str, document_id: str, chunk_size=500, chunk_overlap=50):
+def ingest_document(file_path: str, document_id: str, user_id: str, chunk_size=500, chunk_overlap=50):
     print(f"[Ingest] Loading: {file_path}")
     pages = load_pdf(file_path)
     print(f"[Ingest] Loaded {len(pages)} pages")
@@ -59,7 +59,7 @@ def ingest_document(file_path: str, document_id: str, chunk_size=500, chunk_over
 
     print(f"[Ingest] Embedding and storing...")
     filename = os.path.basename(file_path)
-    embed_and_store(chunks, document_id, filename)
+    embed_and_store(chunks, document_id, filename, user_id)
     print(f"[Ingest] Done.")
 
     return chunks

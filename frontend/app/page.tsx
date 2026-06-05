@@ -1,5 +1,5 @@
 'use client'
-
+import { supabase, signOut } from '../lib/supabase'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import GraphPanel from '../components/GraphPanel'
@@ -305,7 +305,14 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-
+  useEffect(() => {
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (!session) window.location.href = '/login'
+  })
+  setSessionId(genId())
+  loadDocs()
+  setTimeout(() => loadDocs(), 1500)
+}, [])
   useEffect(() => {
     setSessionId(genId())
     loadDocs()

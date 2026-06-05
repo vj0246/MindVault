@@ -10,7 +10,7 @@ def get_supabase():
         os.environ["SUPABASE_SERVICE_KEY"]
     )
 
-def add_to_graph(extracted: dict):
+def add_to_graph(extracted: dict, user_id: str):
     supabase = get_supabase()
     source = extracted.get("source", "unknown")
 
@@ -23,6 +23,7 @@ def add_to_graph(extracted: dict):
             supabase.table("graph_nodes")
             .select("id, sources")
             .eq("node_id", entity)
+            .eq("user_id", user_id)
             .execute()
         )
 
@@ -32,11 +33,12 @@ def add_to_graph(extracted: dict):
                 current_sources.append(source)
                 supabase.table("graph_nodes").update(
                     {"sources": current_sources}
-                ).eq("node_id", entity).execute()
+                ).eq("node_id", entity).eq("user_id", user_id).execute()
         else:
             supabase.table("graph_nodes").insert({
                 "node_id": entity,
-                "sources": [source]
+                "sources": [source],
+                "user_id": user_id
             }).execute()
 
     for rel in extracted.get("relationships", []):
@@ -47,44 +49,47 @@ def add_to_graph(extracted: dict):
         if not subject or not relation or not obj:
             continue
 
-        # Ensure both nodes exist
         for node in [subject, obj]:
             exists = (
                 supabase.table("graph_nodes")
                 .select("id")
                 .eq("node_id", node)
+                .eq("user_id", user_id)
                 .execute()
             )
             if not exists.data:
                 supabase.table("graph_nodes").insert({
                     "node_id": node,
-                    "sources": [source]
+                    "sources": [source],
+                    "user_id": user_id
                 }).execute()
 
-        # Insert edge — ignore if duplicate
         existing_edge = (
             supabase.table("graph_edges")
             .select("id")
             .eq("source", subject)
             .eq("target", obj)
+            .eq("user_id", user_id)
             .execute()
         )
         if not existing_edge.data:
             supabase.table("graph_edges").insert({
                 "source": subject,
                 "target": obj,
-                "relation": relation
+                "relation": relation,
+                "user_id": user_id
             }).execute()
 
-def get_related_nodes(topic: str, depth: int = 2) -> dict:
+def get_related_nodes(topic: str, user_id: str, depth: int = 2) -> dict:
     supabase = get_supabase()
     topic_lower = topic.lower().strip()
     topic_words = [w for w in topic_lower.split() if len(w) > 3]
 
-    all_nodes = supabase.table("graph_nodes").select("node_id, sources").execute().data
-    all_edges = supabase.table("graph_edges").select("source, target, relation").execute().data
+    all_nodes = supabase.table("graph_nodes").select("node_id, sources")\
+        .eq("user_id", user_id).execute().data
+    all_edges = supabase.table("graph_edges").select("source, target, relation")\
+        .eq("user_id", user_id).execute().data
 
-    # Three tier matching — exact → contains → word by word
     matching = []
     for n in all_nodes:
         if topic_lower == n["node_id"]:
@@ -105,7 +110,6 @@ def get_related_nodes(topic: str, depth: int = 2) -> dict:
     if not matching:
         return {"nodes": [], "edges": []}
 
-    # BFS to depth
     visited = {matching[0]}
     current = {matching[0]}
 
@@ -121,19 +125,17 @@ def get_related_nodes(topic: str, depth: int = 2) -> dict:
         current = next_level
 
     node_map = {n["node_id"]: n["sources"] for n in all_nodes}
-
     nodes = [{"id": n, "sources": node_map.get(n, [])} for n in visited]
-    edges = [
-        e for e in all_edges
-        if e["source"] in visited and e["target"] in visited
-    ]
+    edges = [e for e in all_edges if e["source"] in visited and e["target"] in visited]
 
     return {"nodes": nodes, "edges": edges}
 
-def get_full_graph() -> dict:
+def get_full_graph(user_id: str) -> dict:
     supabase = get_supabase()
-    nodes = supabase.table("graph_nodes").select("node_id, sources").execute().data
-    edges = supabase.table("graph_edges").select("source, target, relation").execute().data
+    nodes = supabase.table("graph_nodes").select("node_id, sources")\
+        .eq("user_id", user_id).execute().data
+    edges = supabase.table("graph_edges").select("source, target, relation")\
+        .eq("user_id", user_id).execute().data
 
     return {
         "nodes": [{"id": n["node_id"], "sources": n["sources"]} for n in nodes],
