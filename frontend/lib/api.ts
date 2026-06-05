@@ -1,5 +1,4 @@
 import axios from 'axios'
-import { getToken } from './supabase'
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -9,7 +8,13 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Attach token to every request
+async function getToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null
+  const { getSupabase } = await import('./supabase')
+  const { data: { session } } = await getSupabase().auth.getSession()
+  return session?.access_token || null
+}
+
 api.interceptors.request.use(async (config) => {
   const token = await getToken()
   if (token) config.headers['Authorization'] = `Bearer ${token}`
