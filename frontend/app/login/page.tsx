@@ -1,12 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { getSupabase } from '../../lib/supabase'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -22,12 +17,13 @@ export default function LoginPage() {
     setMessage('')
 
     try {
+      const sb = getSupabase()
       if (isSignup) {
-        const { error } = await supabase.auth.signUp({ email, password })
+        const { error } = await sb.auth.signUp({ email, password })
         if (error) throw error
         setMessage('Check your email to confirm your account.')
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        const { error } = await sb.auth.signInWithPassword({ email, password })
         if (error) throw error
         window.location.href = '/'
       }
