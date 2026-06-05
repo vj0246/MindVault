@@ -1,4 +1,5 @@
 'use client'
+export const dynamic = 'force-dynamic'
 import { getSupabase, signOut } from '../lib/supabase'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
