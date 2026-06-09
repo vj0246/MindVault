@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-import shutil
 import os
 import uuid
 from supabase import create_client
@@ -59,8 +58,11 @@ async def upload_file(file: UploadFile = File(...), user=Depends(get_current_use
 
         os.makedirs("data/docs", exist_ok=True)
         file_path = f"data/docs/{file.filename}"
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            buffer.write(contents)
 
         document_id = str(uuid.uuid4())
         actual_document_id = log_document(
