@@ -52,9 +52,10 @@ def root():
 async def upload_file(file: UploadFile = File(...), user=Depends(get_current_user)):
     try:
         sb = get_supabase()
-        allowed_types = ["application/pdf", "text/plain", "text/markdown"]
-        if file.content_type not in allowed_types:
-            raise HTTPException(status_code=400, detail="Only PDF, TXT and MD files supported.")
+        ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx", ".doc", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
 
         os.makedirs("data/docs", exist_ok=True)
         file_path = f"data/docs/{file.filename}"
@@ -100,6 +101,7 @@ class QueryRequest(BaseModel):
     question: str
     mode: str = "default"
     session_id: str = "default_session"
+    document_ids: list = []
 
 class ExportRequest(BaseModel):
     session_id: str
@@ -116,7 +118,8 @@ def query(req: QueryRequest, user=Depends(get_current_user)):
             question=req.question,
             history=history,
             mode=req.mode,
-            user_id=str(user.id)
+            user_id=str(user.id),
+            document_ids=req.document_ids or None
         )
 
         save_session_message(req.session_id, role="user", content=req.question, user_id=str(user.id))
@@ -125,6 +128,7 @@ def query(req: QueryRequest, user=Depends(get_current_user)):
         return {
             "answer": result["answer"],
             "sources": result["sources"],
+            "chunks": result.get("chunks", []),
             "mode": req.mode,
             "intent": result.get("intent", "answer"),
             "related_concepts": result.get("related_concepts", [])

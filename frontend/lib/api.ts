@@ -35,8 +35,8 @@ export async function uploadDocument(file: File) {
   return res.data
 }
 
-export async function queryKnowledge(question: string, sessionId: string, mode: string) {
-  const res = await api.post('/query', { question, session_id: sessionId, mode })
+export async function queryKnowledge(question: string, sessionId: string, mode: string, documentIds: string[] = []) {
+  const res = await api.post('/query', { question, session_id: sessionId, mode, document_ids: documentIds })
   return res.data
 }
 

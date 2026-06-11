@@ -12,3 +12,4 @@ pydantic
 supabase
 groq
 fastembed
+docx2txt

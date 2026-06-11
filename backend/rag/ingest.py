@@ -1,14 +1,22 @@
 import os
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
-from langchain.schema import Document
+import base64
+from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
 from fastembed import TextEmbedding
 from supabase import create_client
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
 
 EMBED_MODEL = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
+
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}
+IMAGE_MIME = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".bmp": "image/bmp", ".webp": "image/webp", ".tiff": "image/tiff"
+}
 
 def get_supabase():
     return create_client(
@@ -17,26 +25,58 @@ def get_supabase():
     )
 
 def load_document(file_path: str) -> list:
-    """Load any supported document type (PDF, TXT, MD)."""
     ext = os.path.splitext(file_path)[1].lower()
-    print(f"[Ingest] Loading file with extension: {ext}")
 
     if ext == ".pdf":
-        loader = PyPDFLoader(file_path)
-        return loader.load()
+        return PyPDFLoader(file_path).load()
+
     elif ext in (".txt", ".md"):
-        # TextLoader with autodetect encoding to handle different file encodings
-        try:
-            loader = TextLoader(file_path, encoding="utf-8")
-            return loader.load()
-        except Exception:
-            loader = TextLoader(file_path, encoding="latin-1")
-            return loader.load()
+        return TextLoader(file_path, encoding="utf-8").load()
+
+    elif ext in (".docx", ".doc"):
+        return Docx2txtLoader(file_path).load()
+
+    elif ext in IMAGE_EXTENSIONS:
+        return load_image_via_groq(file_path)
+
     else:
-        # Fallback: read as plain text
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-        return [Document(page_content=content, metadata={"source": file_path})]
+        raise ValueError(f"Unsupported file type: {ext}")
+
+def load_image_via_groq(file_path: str) -> list:
+    ext = os.path.splitext(file_path)[1].lower()
+    mime_type = IMAGE_MIME.get(ext, "image/jpeg")
+
+    with open(file_path, "rb") as f:
+        image_data = base64.standard_b64encode(f.read()).decode("utf-8")
+
+    client = Groq(api_key=os.environ["GROQ_API_KEY"])
+    response = client.chat.completions.create(
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime_type};base64,{image_data}"}
+                },
+                {
+                    "type": "text",
+                    "text": (
+                        "Extract all content from this image in full detail. "
+                        "If it contains text or notes, transcribe exactly. "
+                        "If it contains diagrams, charts, or tables, describe them thoroughly. "
+                        "Preserve all structure and information."
+                    )
+                }
+            ]
+        }],
+        max_tokens=2000
+    )
+
+    extracted = response.choices[0].message.content
+    filename = os.path.basename(file_path)
+    print(f"[Ingest] Image extracted via Groq vision: {len(extracted)} chars")
+    return [Document(page_content=extracted, metadata={"source": filename, "type": "image"})]
 
 def chunk_documents(pages, chunk_size=500, chunk_overlap=50):
     splitter = RecursiveCharacterTextSplitter(
@@ -46,25 +86,12 @@ def chunk_documents(pages, chunk_size=500, chunk_overlap=50):
     )
     return splitter.split_documents(pages)
 
-def clear_old_chunks(document_id: str):
-    """Delete existing chunks for a document before re-ingesting."""
-    supabase = get_supabase()
-    result = supabase.table("chunks").delete().eq("document_id", document_id).execute()
-    print(f"[Ingest] Cleared old chunks for document_id={document_id}")
-    return result
-
 def embed_and_store(chunks, document_id: str, filename: str, user_id: str):
     supabase = get_supabase()
     texts = [chunk.page_content for chunk in chunks]
-    
-    if not texts:
-        print("[Ingest] No chunks to embed.")
-        return
-
     all_embeddings = list(EMBED_MODEL.embed(texts))
 
     rows = []
-    batch_size = 50
     for i, (chunk, embedding) in enumerate(zip(chunks, all_embeddings)):
         rows.append({
             "document_id": document_id,
@@ -75,6 +102,7 @@ def embed_and_store(chunks, document_id: str, filename: str, user_id: str):
             "user_id": user_id
         })
 
+    batch_size = 50
     for i in range(0, len(rows), batch_size):
         supabase.table("chunks").insert(rows[i:i+batch_size]).execute()
 
@@ -88,10 +116,6 @@ def ingest_document(file_path: str, document_id: str, user_id: str, chunk_size=5
     chunks = chunk_documents(pages, chunk_size, chunk_overlap)
     print(f"[Ingest] Created {len(chunks)} chunks")
 
-    # Clear old chunks for this document before inserting new ones
-    clear_old_chunks(document_id)
-
-    print(f"[Ingest] Embedding and storing...")
     filename = os.path.basename(file_path)
     embed_and_store(chunks, document_id, filename, user_id)
     print(f"[Ingest] Done.")

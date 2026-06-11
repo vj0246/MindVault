@@ -28,10 +28,10 @@ from fastembed import TextEmbedding
 
 EMBED_MODEL = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
 
-def retrieve_context(question: str, k: int = 5, user_id: str = None) -> dict:
+def retrieve_context(question: str, k: int = 5, user_id: str = None, document_ids: list = None) -> dict:
     supabase = get_supabase()
     embedding = list(EMBED_MODEL.embed([question]))[0].tolist()
-    
+
     params = {
         "query_embedding": embedding,
         "match_count": k,
@@ -39,16 +39,25 @@ def retrieve_context(question: str, k: int = 5, user_id: str = None) -> dict:
     }
     if user_id:
         params["p_user_id"] = user_id
+    if document_ids:
+        params["p_document_ids"] = document_ids
 
     result = supabase.rpc("match_chunks", params).execute()
-    chunks = result.data or []
-    if not chunks:
-        return {"context": "", "sources": []}
+    raw_chunks = result.data or []
+    if not raw_chunks:
+        return {"context": "", "sources": [], "chunks": []}
 
-    context = "\n\n---\n\n".join([c["content"] for c in chunks])
-    sources = list(set([c.get("filename", "Uploaded Document") for c in chunks]))
-
-    return {"context": context, "sources": sources}
+    context = "\n\n---\n\n".join([c["content"] for c in raw_chunks])
+    sources = list(set([c.get("filename", "Uploaded Document") for c in raw_chunks]))
+    chunks = [
+        {
+            "content": c["content"][:200],
+            "similarity": round(c.get("similarity", 0), 3),
+            "filename": c.get("filename", "Uploaded Document")
+        }
+        for c in raw_chunks
+    ]
+    return {"context": context, "sources": sources, "chunks": chunks}
 
 def format_history(history: list) -> list:
     messages = []
@@ -168,7 +177,7 @@ Reply with ONLY one word:
 """)
     return router_prompt | llm | StrOutputParser()
 
-def build_retrieval_chain(mode: str = "default", user_id: str = None):
+def build_retrieval_chain(mode: str = "default", user_id: str = None, document_ids: list = None):
     prompts = {
         "student": """You are helping a student prepare for exams.
 Give direct, exam-ready answers only from the context below.
@@ -215,21 +224,21 @@ Answer:"""
     llm = get_llm()
 
     def run_chain(input: dict) -> dict:
-        retrieved = retrieve_context(input["question"], k=5, user_id=user_id)
+        retrieved = retrieve_context(input["question"], k=5, user_id=user_id, document_ids=document_ids)
         result = (prompt | llm | StrOutputParser()).invoke({
             "context": retrieved["context"],
             "question": input["question"],
             "history": input.get("history", [])
         })
-        return {"answer": result, "sources": retrieved["sources"]}
+        return {"answer": result, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", [])}
 
     return run_chain
 
-def summarize_chain(question: str, mode: str = "default", user_id: str = None) -> dict:
+def summarize_chain(question: str, mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
     llm = get_llm()
-    retrieved = retrieve_context(question, k=8, user_id=user_id)
+    retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
     if not retrieved["context"]:
-        return {"answer": "Nothing relevant found in your documents.", "sources": []}
+        return {"answer": "Nothing relevant found in your documents.", "sources": [], "chunks": []}
 
     prompts = {
         "student": """Summarize as exam revision notes using only the context below.
@@ -248,13 +257,13 @@ Context:\n{context}\nRequest: {question}\nSummary:"""
         "context": retrieved["context"],
         "question": question
     })
-    return {"answer": answer, "sources": retrieved["sources"]}
+    return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", [])}
 
-def comparison_chain(question: str, mode: str = "default", user_id: str = None) -> dict:
+def comparison_chain(question: str, mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
     llm = get_llm()
-    retrieved = retrieve_context(question, k=8, user_id=user_id)
+    retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
     if not retrieved["context"]:
-        return {"answer": "Nothing relevant found in your documents.", "sources": []}
+        return {"answer": "Nothing relevant found in your documents.", "sources": [], "chunks": []}
 
     prompt = ChatPromptTemplate.from_template("""
 Compare the concepts asked about using ONLY the context below.
@@ -275,13 +284,13 @@ Context:\n{context}\nComparison request: {question}\nComparison:
         "context": retrieved["context"],
         "question": question
     })
-    return {"answer": answer, "sources": retrieved["sources"]}
+    return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", [])}
 
-def test_generator_chain(question: str, user_id: str = None) -> dict:
+def test_generator_chain(question: str, user_id: str = None, document_ids: list = None) -> dict:
     llm = get_llm()
-    retrieved = retrieve_context(question, k=8, user_id=user_id)
+    retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
     if not retrieved["context"]:
-        return {"answer": "Nothing relevant found in your documents.", "sources": []}
+        return {"answer": "Nothing relevant found in your documents.", "sources": [], "chunks": []}
 
     prompt = ChatPromptTemplate.from_template("""
 Generate questions based ONLY on the content below.
@@ -303,9 +312,9 @@ Content:\n{context}\nTopic: {question}\nQuestions:
         "context": retrieved["context"],
         "question": question
     })
-    return {"answer": answer, "sources": retrieved["sources"]}
+    return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", [])}
 
-def query_rag(question: str, history: list = [], mode: str = "default", user_id: str = None) -> dict:
+def query_rag(question: str, history: list = [], mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
     print(f"[Debug] question={question}, history={len(history)}")
 
     supabase = get_supabase()
@@ -374,13 +383,13 @@ Answer:""")
         }
 
     elif intent == "compare":
-        result = comparison_chain(resolved_question, mode, user_id=user_id)
+        result = comparison_chain(resolved_question, mode, user_id=user_id, document_ids=document_ids)
     elif intent == "test":
-        result = test_generator_chain(resolved_question, user_id=user_id)
+        result = test_generator_chain(resolved_question, user_id=user_id, document_ids=document_ids)
     elif intent == "summarize":
-        result = summarize_chain(resolved_question, mode, user_id=user_id)
+        result = summarize_chain(resolved_question, mode, user_id=user_id, document_ids=document_ids)
     else:
-        chain_fn = build_retrieval_chain(mode, user_id=user_id)
+        chain_fn = build_retrieval_chain(mode, user_id=user_id, document_ids=document_ids)
         result = chain_fn({
             "question": resolved_question,
             "history": formatted_history
@@ -389,6 +398,7 @@ Answer:""")
     return {
         "answer": result["answer"],
         "sources": result["sources"],
+        "chunks": result.get("chunks", []),
         "intent": intent,
         "related_concepts": get_related_nodes(resolved_question, user_id=user_id).get("nodes", [])
     }

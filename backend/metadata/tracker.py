@@ -44,7 +44,7 @@ def get_all_documents(user_id: str) -> list:
     supabase = get_supabase()
     result = (
         supabase.table("documents")
-        .select("filename, chunk_count, uploaded_at")
+        .select("id, filename, chunk_count, uploaded_at")
         .eq("user_id", user_id)
         .order("uploaded_at", desc=True)
         .execute()

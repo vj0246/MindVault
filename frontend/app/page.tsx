@@ -21,15 +21,23 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   sources?: string[]
+  chunks?: ChunkSource[]
   intent?: Intent
   related_concepts?: { id: string; sources: string[] }[]
   timestamp: string
 }
 
 interface Doc {
+  id: string
   filename: string
   chunk_count: number
   uploaded_at: string
+}
+
+interface ChunkSource {
+  content: string
+  similarity: number
+  filename: string
 }
 
 interface Toast {
@@ -91,6 +99,55 @@ function IntentPill({ intent }: { intent: string }) {
   return <span className={`intent-pill intent-${intent}`}>{intent}</span>
 }
 
+function SourcePanel({ chunks }: { chunks: ChunkSource[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ display: 'inline-block' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--text3)',
+          background: 'var(--surface2)', border: '1px solid var(--border)',
+          borderRadius: 4, padding: '2px 7px', cursor: 'pointer', marginLeft: 4,
+          transition: 'color 0.15s'
+        }}
+        title="View source chunks"
+      >
+        {open ? '▲ sources' : 'ℹ sources'}
+      </button>
+      {open && (
+        <div style={{
+          marginTop: 8, background: 'var(--surface2)', border: '1px solid var(--border)',
+          borderRadius: 8, overflow: 'hidden'
+        }}>
+          {chunks.map((c, i) => (
+            <div key={i} style={{
+              padding: '10px 12px',
+              borderBottom: i < chunks.length - 1 ? '1px solid var(--border)' : 'none'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <span style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--accent)', fontWeight: 600 }}>
+                  📄 {c.filename}
+                </span>
+                <span style={{
+                  fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--accent3)',
+                  background: 'rgba(126,184,164,0.1)', border: '1px solid rgba(126,184,164,0.2)',
+                  borderRadius: 3, padding: '1px 6px'
+                }}>
+                  {Math.round(c.similarity * 100)}% match
+                </span>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.55, fontFamily: 'IBM Plex Mono' }}>
+                {c.content}{c.content.length >= 200 ? '…' : ''}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MessageBubble({ msg, onConceptClick }: {
   msg: Message
   onConceptClick: (c: string) => void
@@ -123,8 +180,13 @@ function MessageBubble({ msg, onConceptClick }: {
         </div>
         <div className="md"><ReactMarkdown>{msg.content}</ReactMarkdown></div>
         {msg.sources && msg.sources.length > 0 && msg.sources[0] !== 'conversation history' && (
-          <div className="flex flex-wrap gap-1 mt-3">
-            {msg.sources.map((s, i) => <span key={i} className="source-chip">📄 {s}</span>)}
+          <div className="mt-3">
+            <div className="flex flex-wrap gap-1 items-center">
+              {msg.sources.map((s, i) => <span key={i} className="source-chip">📄 {s}</span>)}
+              {msg.chunks && msg.chunks.length > 0 && (
+                <SourcePanel chunks={msg.chunks} />
+              )}
+            </div>
           </div>
         )}
         {msg.related_concepts && msg.related_concepts.length > 0 && (
@@ -147,10 +209,11 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onNewSession, onClearSession, open, onClose }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc }: {
   docs: Doc[]; onUpload: (f: File) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
+  selectedDocs: string[]; onToggleDoc: (id: string) => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -209,25 +272,37 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
                 <div className="flex flex-col items-center gap-1 py-2">
                   <span style={{ fontSize: 22, marginBottom: 2 }}>📄</span>
                   <p style={{ fontSize: 12, color: 'var(--text2)' }}>Drop file or click</p>
-                  <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>PDF · TXT · MD</p>
+                  <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>PDF · TXT · MD · DOCX · Images</p>
                 </div>
               )}
             </div>
-            <input ref={fileRef} type="file" accept=".pdf,.txt,.md" className="hidden"
+            <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.docx,.doc,.jpg,.jpeg,.png,.gif,.webp" className="hidden"
               onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
           </div>
 
           <div className="flex-1">
-            <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-              Knowledge Base ({docs.length})
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Knowledge Base ({docs.length})
+              </p>
+              <p style={{ fontSize: 9, fontFamily: 'IBM Plex Mono', color: selectedDocs.length > 0 ? 'var(--accent)' : 'var(--text3)' }}>
+                {selectedDocs.length > 0 ? `${selectedDocs.length} selected` : 'all'}
+              </p>
+            </div>
             {docs.length === 0 ? (
               <p style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: '16px 0' }}>No documents yet</p>
             ) : (
               <div className="flex flex-col gap-1">
                 {docs.map((doc, i) => (
-                  <div key={i} className="doc-item fade-up">
-                    <span style={{ fontSize: 13, flexShrink: 0 }}>📄</span>
+                  <div key={i} className="doc-item fade-up" style={{ cursor: 'pointer' }}
+                    onClick={() => onToggleDoc(doc.id)}>
+                    <input
+                      type="checkbox"
+                      checked={selectedDocs.includes(doc.id)}
+                      onChange={() => onToggleDoc(doc.id)}
+                      onClick={e => e.stopPropagation()}
+                      style={{ flexShrink: 0, accentColor: 'var(--accent)', cursor: 'pointer' }}
+                    />
                     <div className="flex-1 min-w-0">
                       <p style={{ fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</p>
                       <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>
@@ -304,6 +379,7 @@ export default function Home() {
   const [graphTopic, setGraphTopic] = useState('')
   const [graphLoading, setGraphLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [selectedDocs, setSelectedDocs] = useState<string[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
@@ -375,11 +451,12 @@ export default function Home() {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     try {
-      const result = await queryKnowledge(question, sessionId, mode)
+      const result = await queryKnowledge(question, sessionId, mode, selectedDocs)
       setMessages(prev => [...prev, {
         id: genId(), role: 'assistant',
         content: result.answer || 'No answer returned.',
         sources: result.sources || [],
+        chunks: result.chunks || [],
         intent: result.intent,
         related_concepts: result.related_concepts || [],
         timestamp: new Date().toISOString(),
@@ -412,6 +489,12 @@ export default function Home() {
     showToast('New session started', 'info')
   }
 
+  const handleToggleDoc = (id: string) => {
+    setSelectedDocs(prev =>
+      prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
+    )
+  }
+
   const handleClearSession = async () => {
     try { await clearSession(sessionId) } catch { /* silent */ }
     setMessages([]); showToast('History cleared', 'info')
@@ -428,6 +511,7 @@ export default function Home() {
         sessionId={sessionId} msgCount={messages.length}
         onExport={handleExport} onNewSession={handleNewSession} onClearSession={handleClearSession}
         open={sidebarOpen} onClose={() => setSidebarOpen(false)}
+        selectedDocs={selectedDocs} onToggleDoc={handleToggleDoc}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--bg)' }}>
