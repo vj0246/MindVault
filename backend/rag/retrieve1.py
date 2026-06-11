@@ -24,9 +24,7 @@ def get_llm():
     )
 
 
-from fastembed import TextEmbedding
-
-EMBED_MODEL = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
+from rag.embedder import EMBED_MODEL
 
 def retrieve_context(question: str, k: int = 5, user_id: str = None, document_ids: list = None) -> dict:
     supabase = get_supabase()

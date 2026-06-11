@@ -3,14 +3,12 @@ import base64
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
-from fastembed import TextEmbedding
+from rag.embedder import EMBED_MODEL
 from supabase import create_client
 from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
-
-EMBED_MODEL = TextEmbedding("sentence-transformers/all-MiniLM-L6-v2")
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}
 IMAGE_MIME = {

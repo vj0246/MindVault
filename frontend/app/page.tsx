@@ -388,7 +388,6 @@ export default function Home() {
   })
   setSessionId(genId())
   loadDocs()
-  setTimeout(() => loadDocs(), 1500)
 }, [])
 
   useEffect(() => {
@@ -400,10 +399,16 @@ export default function Home() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  const loadDocs = async () => {
+  const loadDocs = async (showCached = true) => {
     try {
+      if (showCached) {
+        const cached = localStorage.getItem('mindvault_docs')
+        if (cached) setDocs(JSON.parse(cached))
+      }
       const data = await getDocuments()
-      setDocs(data.documents || [])
+      const docs = data.documents || []
+      setDocs(docs)
+      localStorage.setItem('mindvault_docs', JSON.stringify(docs))
     } catch { /* silent */ }
   }
 
@@ -429,7 +434,8 @@ export default function Home() {
       setUploadStatus('Embedding chunks...')
       const result = await uploadDocument(file)
       setUploadStatus(`Done — ${result.chunks} chunks`)
-      await loadDocs()
+      localStorage.removeItem('mindvault_docs')
+      await loadDocs(false)
       showToast(`${file.name} added to vault`, 'success')
       setTimeout(() => { setUploading(false); setUploadStatus('') }, 2500)
     } catch {
