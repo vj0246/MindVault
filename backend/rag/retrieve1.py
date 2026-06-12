@@ -1,5 +1,4 @@
 import os
-#from sentence_transformers import SentenceTransformer
 from supabase import create_client
 from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -10,52 +9,141 @@ from graph.store import get_related_nodes
 from dotenv import load_dotenv
 
 load_dotenv()
-    
+
+_RERANKER = None
+
+def _get_reranker():
+    global _RERANKER
+    if _RERANKER is None:
+        from flashrank import Ranker
+        _RERANKER = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="/tmp/flashrank")
+    return _RERANKER
+
+def _rerank(query: str, chunks: list, top_k: int) -> list:
+    """Cross-encoder re-rank via FlashRank. Falls back to RRF order if unavailable."""
+    if not chunks:
+        return chunks
+    try:
+        from flashrank import RerankRequest
+        ranker = _get_reranker()
+        passages = [{"id": i, "text": c.get("content", "")} for i, c in enumerate(chunks)]
+        results = ranker.rerank(RerankRequest(query=query, passages=passages))
+        reranked = []
+        for r in results[:top_k]:
+            chunk = chunks[r["id"]].copy()
+            chunk["rerank_score"] = round(r["score"], 4)
+            reranked.append(chunk)
+        return reranked
+    except Exception as e:
+        print(f"[Retrieve] Re-rank failed, falling back to RRF order: {e}")
+        return chunks[:top_k]
+
 def get_supabase():
     return create_client(
         os.environ["SUPABASE_URL"],
         os.environ["SUPABASE_SERVICE_KEY"]
     )
-def get_llm():
+
+def get_llm(temperature: float = 0.0):
+    # Default temperature=0: deterministic, minimal hallucination for factual RAG
+    # Creative chains (summarize/compare/test) pass temperature=0.15
     return ChatGroq(
         model="llama-3.3-70b-versatile",
-        temperature=0.2,
+        temperature=temperature,
         api_key=os.environ["GROQ_API_KEY"]
     )
 
 
 from rag.embedder import EMBED_MODEL
 
+def _rrf_merge(semantic: list, keyword: list, top_k: int, rrf_k: int = 60) -> list:
+    """Reciprocal Rank Fusion — merges two ranked lists into one."""
+    scores = {}
+    chunk_map = {}
+
+    for rank, chunk in enumerate(semantic):
+        key = chunk["content"][:120]
+        scores[key] = scores.get(key, 0) + 1 / (rrf_k + rank + 1)
+        chunk_map[key] = chunk
+
+    for rank, chunk in enumerate(keyword):
+        key = chunk["content"][:120]
+        scores[key] = scores.get(key, 0) + 1 / (rrf_k + rank + 1)
+        if key not in chunk_map:
+            chunk_map[key] = chunk
+
+    ranked = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
+    return [chunk_map[k] for k in ranked[:top_k]]
+
+
 def retrieve_context(question: str, k: int = 5, user_id: str = None, document_ids: list = None) -> dict:
     supabase = get_supabase()
     embedding = list(EMBED_MODEL.embed([question]))[0].tolist()
 
-    params = {
+    # --- Semantic search (vector similarity) ---
+    sem_params = {
         "query_embedding": embedding,
-        "match_count": k,
-        "similarity_threshold": 0.3
+        "match_count": k * 3,       # fetch wider pool for fusion
+        "similarity_threshold": 0.2  # lower threshold, RRF handles re-ranking
     }
     if user_id:
-        params["p_user_id"] = user_id
+        sem_params["p_user_id"] = user_id
     if document_ids:
-        params["p_document_ids"] = document_ids
+        sem_params["p_document_ids"] = document_ids
 
-    result = supabase.rpc("match_chunks", params).execute()
-    raw_chunks = result.data or []
-    if not raw_chunks:
+    sem_result = supabase.rpc("match_chunks", sem_params).execute()
+    semantic_chunks = sem_result.data or []
+
+    # --- Keyword search (PostgreSQL FTS / BM25-style) ---
+    keyword_chunks = []
+    try:
+        kw_params = {
+            "query_text": question,
+            "match_count": k * 2
+        }
+        if user_id:
+            kw_params["p_user_id"] = user_id
+        if document_ids:
+            kw_params["p_document_ids"] = document_ids
+
+        kw_result = supabase.rpc("keyword_search_chunks", kw_params).execute()
+        keyword_chunks = kw_result.data or []
+    except Exception as e:
+        print(f"[Retrieve] Keyword search failed, falling back to semantic only: {e}")
+
+    if not semantic_chunks and not keyword_chunks:
         return {"context": "", "sources": [], "chunks": []}
 
-    context = "\n\n---\n\n".join([c["content"] for c in raw_chunks])
-    sources = list(set([c.get("filename", "Uploaded Document") for c in raw_chunks]))
+    # --- RRF fusion ---
+    rrf_pool = _rrf_merge(semantic_chunks, keyword_chunks, top_k=k * 2)
+
+    # --- Cross-encoder re-ranking (FlashRank) ---
+    # RRF merges by rank position; cross-encoder scores exact query-passage relevance
+    fused = _rerank(question, rrf_pool, top_k=k)
+
+    # Label each chunk with its source so LLM can cite inline
+    context_parts = []
+    for c in fused:
+        fname = c.get("filename", "Uploaded Document")
+        context_parts.append(f"[Doc: {fname}]\n{c['content']}")
+    context = "\n\n---\n\n".join(context_parts)
+
+    sources = list(set([c.get("filename", "Uploaded Document") for c in fused]))
     chunks = [
         {
             "content": c["content"][:200],
-            "similarity": round(c.get("similarity", 0), 3),
+            "similarity": round(c.get("similarity", c.get("rank", 0)), 3),
             "filename": c.get("filename", "Uploaded Document")
         }
-        for c in raw_chunks
+        for c in fused
     ]
-    return {"context": context, "sources": sources, "chunks": chunks}
+    sims = sorted([c.get("similarity", 0) for c in fused if c.get("similarity", 0) > 0], reverse=True)[:3]
+    if sims:
+        avg_sim = sum(sims) / len(sims)
+        confidence = round(min(1.0, avg_sim * (1 + 0.08 * min(len(fused) - 1, 4))), 3)
+    else:
+        confidence = 0.0
+    return {"context": context, "sources": sources, "chunks": chunks, "confidence": confidence}
 
 def format_history(history: list) -> list:
     messages = []
@@ -178,35 +266,31 @@ Reply with ONLY one word:
 def build_retrieval_chain(mode: str = "default", user_id: str = None, document_ids: list = None):
     prompts = {
         "student": """You are helping a student prepare for exams.
-Give direct, exam-ready answers only from the context below.
-Use bullet points. Bold key terms.
+STRICT RULE: Use ONLY the context below. Never use outside knowledge. If the answer is not in context, respond EXACTLY: "This isn't in your uploaded documents." Cite the source file after each fact in brackets e.g. [notes.pdf].
+You are helping a student. Use bullet points. Bold key terms.
 Maximum 150 words unless detail is specifically asked for.
-If not in context say: "This isn't in your uploaded documents."
 
 Context: {context}
 Question: {question}
 Answer:""",
         "lawyer": """You are a legal research assistant.
-Answer precisely and formally using only the context below.
-Flag ambiguities. Cite specific sections where possible.
+STRICT RULE: Use ONLY the context below. Never use outside knowledge. If the answer is not in context, respond EXACTLY: "This isn't in your uploaded documents." Cite the source file after each fact in brackets e.g. [notes.pdf].
+You are a legal research assistant. Answer formally. Flag ambiguities.
 Maximum 150 words unless detail is specifically asked for.
-If not in context say: "This isn't in your uploaded documents."
 
 Context: {context}
 Question: {question}
 Answer:""",
         "developer": """You are a technical assistant.
-Answer precisely using only the context below.
-Include implementation details if present in context.
+STRICT RULE: Use ONLY the context below. Never use outside knowledge. If the answer is not in context, respond EXACTLY: "This isn't in your uploaded documents." Cite the source file after each fact in brackets e.g. [notes.pdf].
+You are a technical assistant. Include implementation details if present.
 Maximum 150 words unless detail is specifically asked for.
-If not in context say: "This isn't in your uploaded documents."
 
 Context: {context}
 Question: {question}
 Answer:""",
-        "default": """Answer using only the context below.
+        "default": """STRICT RULE: Use ONLY the context below. Never use outside knowledge. If the answer is not in context, respond EXACTLY: "This isn't in your uploaded documents." Cite the source file after each fact in brackets e.g. [notes.pdf].
 Be clear and concise. Maximum 150 words.
-If not in context say: "This isn't in your uploaded documents."
 
 Context: {context}
 Question: {question}
@@ -228,12 +312,12 @@ Answer:"""
             "question": input["question"],
             "history": input.get("history", [])
         })
-        return {"answer": result, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", [])}
+        return {"answer": result, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", []), "confidence": retrieved.get("confidence", 0.0)}
 
     return run_chain
 
 def summarize_chain(question: str, mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
-    llm = get_llm()
+    llm = get_llm(temperature=0.15)
     retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
     if not retrieved["context"]:
         return {"answer": "Nothing relevant found in your documents.", "sources": [], "chunks": []}
@@ -245,7 +329,7 @@ Context:\n{context}\nRequest: {question}\nRevision Summary:""",
         "lawyer": """Summarize as an executive brief using only the context below.
 Include key points, obligations, and risks.
 Context:\n{context}\nRequest: {question}\nExecutive Brief:""",
-        "default": """Summarize clearly and concisely using only the context below.
+        "default": """Summarize using ONLY the context below. Never add outside knowledge.
 Use headers and bullet points where helpful.
 Context:\n{context}\nRequest: {question}\nSummary:"""
     }
@@ -255,16 +339,16 @@ Context:\n{context}\nRequest: {question}\nSummary:"""
         "context": retrieved["context"],
         "question": question
     })
-    return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", [])}
+    return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", []), "confidence": retrieved.get("confidence", 0.0)}
 
 def comparison_chain(question: str, mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
-    llm = get_llm()
+    llm = get_llm(temperature=0.15)
     retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
     if not retrieved["context"]:
         return {"answer": "Nothing relevant found in your documents.", "sources": [], "chunks": []}
 
     prompt = ChatPromptTemplate.from_template("""
-Compare the concepts asked about using ONLY the context below.
+Compare using ONLY the context below. Never use outside knowledge or assumptions.
 Structure your response as:
 
 **Similarities:**
@@ -282,16 +366,16 @@ Context:\n{context}\nComparison request: {question}\nComparison:
         "context": retrieved["context"],
         "question": question
     })
-    return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", [])}
+    return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", []), "confidence": retrieved.get("confidence", 0.0)}
 
 def test_generator_chain(question: str, user_id: str = None, document_ids: list = None) -> dict:
-    llm = get_llm()
+    llm = get_llm(temperature=0.15)
     retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
     if not retrieved["context"]:
         return {"answer": "Nothing relevant found in your documents.", "sources": [], "chunks": []}
 
     prompt = ChatPromptTemplate.from_template("""
-Generate questions based ONLY on the content below.
+Generate questions based STRICTLY on the content below. Every question and answer must be traceable to the context.
 Mix of 3 MCQs and 2 short answer questions.
 Give answers at the end.
 
@@ -310,7 +394,7 @@ Content:\n{context}\nTopic: {question}\nQuestions:
         "context": retrieved["context"],
         "question": question
     })
-    return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", [])}
+    return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", []), "confidence": retrieved.get("confidence", 0.0)}
 
 def query_rag(question: str, history: list = [], mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
     print(f"[Debug] question={question}, history={len(history)}")
@@ -397,6 +481,7 @@ Answer:""")
         "answer": result["answer"],
         "sources": result["sources"],
         "chunks": result.get("chunks", []),
+        "confidence": result.get("confidence", 0.0),
         "intent": intent,
         "related_concepts": get_related_nodes(resolved_question, user_id=user_id).get("nodes", [])
     }

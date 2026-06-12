@@ -22,6 +22,7 @@ interface Message {
   content: string
   sources?: string[]
   chunks?: ChunkSource[]
+  confidence?: number
   intent?: Intent
   related_concepts?: { id: string; sources: string[] }[]
   timestamp: string
@@ -97,6 +98,21 @@ function TypingIndicator() {
 
 function IntentPill({ intent }: { intent: string }) {
   return <span className={`intent-pill intent-${intent}`}>{intent}</span>
+}
+
+function ConfidenceBadge({ score }: { score: number }) {
+  const pct = Math.round(score * 100)
+  const color = score >= 0.7 ? '#4ade80' : score >= 0.4 ? '#facc15' : '#f87171'
+  const label = score >= 0.7 ? 'High' : score >= 0.4 ? 'Medium' : 'Low'
+  return (
+    <span style={{
+      fontSize: 9, fontFamily: 'IBM Plex Mono', padding: '2px 7px',
+      borderRadius: 4, border: `1px solid ${color}33`,
+      color, background: `${color}11`, marginLeft: 6
+    }}>
+      {label} {pct}%
+    </span>
+  )
 }
 
 function SourcePanel({ chunks }: { chunks: ChunkSource[] }) {
@@ -468,6 +484,7 @@ export default function Home() {
         content: result.answer || 'No answer returned.',
         sources: result.sources || [],
         chunks: result.chunks || [],
+        confidence: result.confidence ?? undefined,
         intent: result.intent,
         related_concepts: result.related_concepts || [],
         timestamp: new Date().toISOString(),

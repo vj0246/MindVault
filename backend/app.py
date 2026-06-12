@@ -129,6 +129,7 @@ def query(req: QueryRequest, user=Depends(get_current_user)):
             "answer": result["answer"],
             "sources": result["sources"],
             "chunks": result.get("chunks", []),
+            "confidence": result.get("confidence", 0.0),
             "mode": req.mode,
             "intent": result.get("intent", "answer"),
             "related_concepts": result.get("related_concepts", [])
