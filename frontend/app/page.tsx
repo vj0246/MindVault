@@ -210,7 +210,7 @@ function MessageBubble({ msg, onConceptClick }: {
 }
 
 function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc }: {
-  docs: Doc[]; onUpload: (f: File) => void; uploading: boolean; uploadStatus: string
+  docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
   selectedDocs: string[]; onToggleDoc: (id: string) => void
@@ -260,7 +260,7 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
               className={`upload-zone ${dragging ? 'drag-over' : ''}`}
               onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
               onDragLeave={() => setDragging(false)}
-              onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) onUpload(f) }}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); const files = Array.from(e.dataTransfer.files); if (files.length) onUpload(files) }}
               onClick={() => !uploading && fileRef.current?.click()}
             >
               {uploading ? (
@@ -271,13 +271,13 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
               ) : (
                 <div className="flex flex-col items-center gap-1 py-2">
                   <span style={{ fontSize: 22, marginBottom: 2 }}>📄</span>
-                  <p style={{ fontSize: 12, color: 'var(--text2)' }}>Drop file or click</p>
+                  <p style={{ fontSize: 12, color: 'var(--text2)' }}>Drop files or click</p>
                   <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>PDF · TXT · MD · DOCX · Images</p>
                 </div>
               )}
             </div>
-            <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.docx,.doc,.jpg,.jpeg,.png,.gif,.webp" className="hidden"
-              onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])} />
+            <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.docx,.doc,.jpg,.jpeg,.png,.gif,.webp" multiple className="hidden"
+              onChange={(e) => { const files = Array.from(e.target.files || []); if (files.length) onUpload(files) }} />
           </div>
 
           <div className="flex-1">
@@ -294,7 +294,7 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             ) : (
               <div className="flex flex-col gap-1">
                 {docs.map((doc, i) => (
-                  <div key={i} className="doc-item fade-up" style={{ cursor: 'pointer' }}
+                  <div key={i} className={`doc-item fade-up ${selectedDocs.includes(doc.id) ? 'active' : ''}`} style={{ cursor: 'pointer' }}
                     onClick={() => onToggleDoc(doc.id)}>
                     <input
                       type="checkbox"
@@ -427,22 +427,27 @@ export default function Home() {
     }
   }
 
-  const handleUpload = async (file: File) => {
+  const handleUpload = async (files: File[]) => {
+    if (!files.length) return
     setUploading(true)
-    setUploadStatus('Reading file...')
-    try {
-      setUploadStatus('Embedding chunks...')
-      const result = await uploadDocument(file)
-      setUploadStatus(`Done — ${result.chunks} chunks`)
-      localStorage.removeItem('mindvault_docs')
-      await loadDocs(false)
-      showToast(`${file.name} added to vault`, 'success')
-      setTimeout(() => { setUploading(false); setUploadStatus('') }, 2500)
-    } catch {
-      setUploadStatus('Upload failed')
-      showToast('Upload failed. Check backend.', 'error')
-      setTimeout(() => { setUploading(false); setUploadStatus('') }, 2500)
+    let successCount = 0
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      try {
+        setUploadStatus(files.length > 1 ? `Uploading ${i + 1}/${files.length}: ${file.name.slice(0, 20)}...` : 'Embedding chunks...')
+        await uploadDocument(file)
+        successCount++
+      } catch {
+        showToast(`Failed: ${file.name}`, 'error')
+      }
     }
+    localStorage.removeItem('mindvault_docs')
+    await loadDocs(false)
+    if (successCount > 0) {
+      setUploadStatus(`Done — ${successCount} file${successCount > 1 ? 's' : ''} added`)
+      showToast(`${successCount} file${successCount > 1 ? 's' : ''} added to vault`, 'success')
+    }
+    setTimeout(() => { setUploading(false); setUploadStatus('') }, 2500)
   }
 
   const handleSend = useCallback(async (text?: string) => {
