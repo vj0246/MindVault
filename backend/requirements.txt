@@ -14,3 +14,7 @@ groq
 fastembed
 docx2txt
 flashrank
+ragas==0.1.21
+datasets
+pandas
+tabulate
