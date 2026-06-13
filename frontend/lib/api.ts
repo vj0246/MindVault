@@ -59,3 +59,27 @@ export async function clearSession(sessionId: string) {
   const res = await api.delete(`/session/${sessionId}`)
   return res.data
 }
+export async function listSessions() {
+  const res = await api.get('/sessions')
+  return res.data
+}
+
+export async function createSession() {
+  const res = await api.post('/sessions')
+  return res.data  // { session_id, name }
+}
+
+export async function renameSession(sessionId: string, name: string) {
+  const res = await api.patch(`/sessions/${sessionId}/rename`, { name })
+  return res.data
+}
+
+export async function deleteSession(sessionId: string) {
+  const res = await api.delete(`/sessions/${sessionId}`)
+  return res.data
+}
+
+export async function getSessionHistory(sessionId: string) {
+  const res = await api.get(`/sessions/${sessionId}/history`)
+  return res.data  // { history: [{role, content, timestamp}] }
+}

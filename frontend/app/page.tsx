@@ -35,6 +35,13 @@ interface Doc {
   uploaded_at: string
 }
 
+interface ChatSession {
+  id: string
+  name: string
+  created_at: string
+  last_active: string
+}
+
 interface ChunkSource {
   content: string
   similarity: number
@@ -225,11 +232,12 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
   selectedDocs: string[]; onToggleDoc: (id: string) => void
+  sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -295,6 +303,43 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.docx,.doc,.jpg,.jpeg,.png,.gif,.webp" multiple className="hidden"
               onChange={(e) => { const files = Array.from(e.target.files || []); if (files.length) onUpload(files) }} />
           </div>
+
+
+            {/* ── Chat Sessions ─────────────────────────────── */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Chats ({sessions.length})
+                </p>
+                <button onClick={onNewSession} style={{
+                  fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--accent)',
+                  background: 'rgba(126,184,164,0.08)', border: '1px solid rgba(126,184,164,0.2)',
+                  borderRadius: 4, padding: '2px 8px', cursor: 'pointer'
+                }}>+ New</button>
+              </div>
+              {sessions.map(s => (
+                <div key={s.id} onClick={() => onSelectSession(s.id)} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '6px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 2,
+                  background: s.id === sessionId ? 'rgba(126,184,164,0.1)' : 'transparent',
+                  border: s.id === sessionId ? '1px solid rgba(126,184,164,0.2)' : '1px solid transparent',
+                }}>
+                  <span style={{
+                    fontSize: 11, color: s.id === sessionId ? 'var(--accent)' : 'var(--text2)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+                    fontFamily: 'IBM Plex Mono'
+                  }}>
+                    {s.name.slice(0, 32)}{s.name.length > 32 ? '…' : ''}
+                  </span>
+                  <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }}
+                    style={{ fontSize: 10, color: 'var(--text3)', background: 'none',
+                             border: 'none', cursor: 'pointer', padding: '0 4px', flexShrink: 0 }}>✕</button>
+                </div>
+              ))}
+              {sessions.length === 0 && (
+                <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>No chats yet</p>
+              )}
+            </div>
 
           <div className="flex-1">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -396,13 +441,27 @@ export default function Home() {
   const [graphLoading, setGraphLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [selectedDocs, setSelectedDocs] = useState<string[]>([])
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [userId, setUserId] = useState<string>('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
   getSupabase().auth.getSession().then(({ data: { session } }) => {
-    if (!session) window.location.href = '/login'
+    if (!session) { window.location.href = '/login'; return }
+    const uid = session.user.id
+    setUserId(uid)
+    // Restore last active session from localStorage, or create fresh one
+    const stored = localStorage.getItem(`mv_session_${uid}`)
+    if (stored) {
+      setSessionId(stored)
+    } else {
+      createSession().then(s => {
+        setSessionId(s.session_id)
+        localStorage.setItem(`mv_session_${uid}`, s.session_id)
+      })
+    }
+    loadSessions()
   })
-  setSessionId(genId())
   loadDocs()
 }, [])
 
@@ -413,6 +472,13 @@ export default function Home() {
   const showToast = (msg: string, type: Toast['type'] = 'info') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3000)
+  }
+
+  const loadSessions = async () => {
+    try {
+      const data = await listSessions()
+      setSessions(data.sessions || [])
+    } catch { /* silent */ }
   }
 
   const loadDocs = async (showCached = true) => {
@@ -479,6 +545,12 @@ export default function Home() {
 
     try {
       const result = await queryKnowledge(question, sessionId, mode, selectedDocs)
+      // Auto-name session from first message if still "New Chat"
+      const activeSession = sessions.find(s => s.id === sessionId)
+      if (!activeSession || activeSession.name === 'New Chat') {
+        const autoName = question.slice(0, 45)
+        renameSession(sessionId, autoName).then(() => loadSessions()).catch(() => {})
+      }
       setMessages(prev => [...prev, {
         id: genId(), role: 'assistant',
         content: result.answer || 'No answer returned.',
@@ -540,6 +612,7 @@ export default function Home() {
         onExport={handleExport} onNewSession={handleNewSession} onClearSession={handleClearSession}
         open={sidebarOpen} onClose={() => setSidebarOpen(false)}
         selectedDocs={selectedDocs} onToggleDoc={handleToggleDoc}
+        sessions={sessions} onSelectSession={handleSelectSession} onDeleteSession={handleDeleteSession}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--bg)' }}>

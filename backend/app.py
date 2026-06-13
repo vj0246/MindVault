@@ -8,7 +8,10 @@ import uuid
 from supabase import create_client
 from rag.ingest import ingest_document
 from rag.retrieve1 import query_rag
-from rag.memory import get_session_history, save_session_message, clear_session
+from rag.memory import (
+    get_session_history, save_session_message, clear_session_messages,
+    list_chat_sessions, create_chat_session, rename_chat_session, delete_chat_session
+)
 from metadata.tracker import log_document, get_all_documents
 from graph.extractor import extract_entities_and_relations
 from graph.store import add_to_graph, get_related_nodes, get_full_graph
@@ -97,6 +100,12 @@ async def upload_file(file: UploadFile = File(...), user=Depends(get_current_use
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+class RenameRequest(BaseModel):
+    name: str
+
+class RenameRequest(BaseModel):
+    name: str
+
 class QueryRequest(BaseModel):
     question: str
     mode: str = "default"
@@ -167,10 +176,32 @@ def export_session(req: ExportRequest, user=Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/session/{session_id}")
-def clear_session_route(session_id: str, user=Depends(get_current_user)):
-    clear_session(session_id, user_id=str(user.id))
-    return {"message": f"Session {session_id} cleared."}
+# ── Session management ────────────────────────────────────────────────────
+
+@app.get("/sessions")
+def list_sessions_route(user=Depends(get_current_user)):
+    return {"sessions": list_chat_sessions(str(user.id))}
+
+@app.post("/sessions")
+def create_session_route(user=Depends(get_current_user)):
+    session_id = str(uuid.uuid4())
+    session = create_chat_session(session_id, str(user.id))
+    return {"session_id": session_id, "name": session["name"]}
+
+@app.patch("/sessions/{session_id}/rename")
+def rename_session_route(session_id: str, body: RenameRequest, user=Depends(get_current_user)):
+    rename_chat_session(session_id, str(user.id), body.name)
+    return {"ok": True}
+
+@app.get("/sessions/{session_id}/history")
+def get_history_route(session_id: str, user=Depends(get_current_user)):
+    history = get_session_history(session_id, str(user.id))
+    return {"history": history}
+
+@app.delete("/sessions/{session_id}")
+def delete_session_route(session_id: str, user=Depends(get_current_user)):
+    delete_chat_session(session_id, str(user.id))
+    return {"ok": True}
 
 @app.get("/graph/{topic}")
 def get_graph_topic(topic: str, user=Depends(get_current_user)):
