@@ -5,7 +5,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import os
 import uuid
-from supabase import create_client
+from rag.db import get_supabase
 from rag.ingest import ingest_document
 from rag.retrieve1 import query_rag
 from rag.memory import (
@@ -30,11 +30,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def get_supabase():
-    return create_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_KEY"]
-    )
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     if not credentials:

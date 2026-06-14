@@ -1,15 +1,10 @@
 import os
 from datetime import datetime
-from supabase import create_client
+from rag.db import get_supabase
 from dotenv import load_dotenv
 
 load_dotenv()
 
-def get_supabase():
-    return create_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_KEY"]
-    )
 
 def log_document(filename: str, path: str, chunk_count: int, document_id: str, user_id: str) -> str:
     supabase = get_supabase()

@@ -1,5 +1,5 @@
 import os
-from supabase import create_client
+from rag.db import get_supabase
 from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema.runnable import RunnablePassthrough, RunnableLambda
@@ -38,20 +38,38 @@ def _rerank(query: str, chunks: list, top_k: int) -> list:
         print(f"[Retrieve] Re-rank failed, falling back to RRF order: {e}")
         return chunks[:top_k]
 
-def get_supabase():
-    return create_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_KEY"]
-    )
+# ── Singletons ──────────────────────────────────────────────────────────────
+# Render's free tier is 512MB. Creating new ChatGroq / Supabase clients per
+# call opens new httpx connection pools that don't get cleaned up fast enough
+# under rapid requests, causing memory to climb until the process is OOM-killed
+# (manifests as 502s after a handful of queries). Cache and reuse instead.
+
+_LLM_CACHE = {}
 
 def get_llm(temperature: float = 0.0):
     # Default temperature=0: deterministic, minimal hallucination for factual RAG
     # Creative chains (summarize/compare/test) pass temperature=0.15
-    return ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=temperature,
-        api_key=os.environ["GROQ_API_KEY"]
-    )
+    #
+    # FALLBACK: if 70b hits a rate limit (separate daily token pool per model
+    # on Groq), automatically retry on 8b-instant instead of failing the
+    # whole request. Each model has its own TPD quota, so this gives
+    # effectively 2x headroom during traffic spikes.
+    #
+    # Only 2 distinct temperatures are used (0.0, 0.15) -> cache by temperature
+    # so each ChatGroq/httpx client pair is created ONCE and reused.
+    if temperature not in _LLM_CACHE:
+        primary = ChatGroq(
+            model="llama-3.3-70b-versatile",
+            temperature=temperature,
+            api_key=os.environ["GROQ_API_KEY"]
+        )
+        fallback = ChatGroq(
+            model="llama-3.1-8b-instant",
+            temperature=temperature,
+            api_key=os.environ["GROQ_API_KEY"]
+        )
+        _LLM_CACHE[temperature] = primary.with_fallbacks([fallback])
+    return _LLM_CACHE[temperature]
 
 
 from rag.embedder import EMBED_MODEL

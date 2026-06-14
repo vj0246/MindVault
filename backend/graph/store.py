@@ -1,14 +1,9 @@
 import os
-from supabase import create_client
+from rag.db import get_supabase
 from dotenv import load_dotenv
 
 load_dotenv()
 
-def get_supabase():
-    return create_client(
-        os.environ["SUPABASE_URL"],
-        os.environ["SUPABASE_SERVICE_KEY"]
-    )
 
 def add_to_graph(extracted: dict, user_id: str):
     supabase = get_supabase()
