@@ -11,6 +11,11 @@ import {
   exportSession,
   getGraphTopic,
   clearSession,
+  createSession,
+  listSessions,
+  renameSession,
+  deleteSession,
+  getSessionHistory,
 } from '../lib/api'
 
 type Mode = 'student' | 'lawyer' | 'developer' | 'default'
