@@ -20,6 +20,12 @@ def log_document(filename: str, path: str, chunk_count: int, document_id: str, u
     
     if existing.data:
         existing_id = existing.data[0]["id"]
+        # Re-upload of same filename: delete OLD chunks for this document
+        # before re-ingestion runs. Without this, new chunks get appended
+        # alongside stale ones under the same document_id -- chunk_count
+        # tracks only the new count, but the chunks table accumulates both,
+        # so retrieval returns duplicate/outdated content.
+        supabase.table("chunks").delete().eq("document_id", existing_id).execute()
         supabase.table("documents").update({
             "chunk_count": chunk_count,
             "uploaded_at": datetime.utcnow().isoformat()
