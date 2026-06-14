@@ -16,12 +16,14 @@ HOW TO RUN:
 
 3. cd backend && python eval/evaluate.py
 """
+from dotenv import load_dotenv
 
+load_dotenv()
 import os, sys, json, datetime, requests
 
 # ── EDIT THESE ─────────────────────────────────────────────────────────────
 RENDER_API_URL = "https://mindvault-98xb.onrender.com"
-RETRIEVAL_MODE = "default"
+RETRIEVAL_MODE = "student"
 
 # Paste your JWT token here.
 # How to get it:
@@ -29,11 +31,10 @@ RETRIEVAL_MODE = "default"
 #   2. DevTools (F12) → Network tab → click any request (e.g. /documents)
 #   3. Headers → Authorization → copy the value after "Bearer "
 #   4. Paste the full eyJ... token below
-
+BEARER_TOKEN="eyJhbGciOiJFUzI1NiIsImtpZCI6IjE3MzExODg1LTNiMzctNDRkZC1hMTY4LWY3OTRlMTY3YmIxMSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3dtY2h0ZHR4bnNibGx4a3ltdXFjLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI2MzBkNzc2My00OTY3LTQ4MWEtODNlOS1hMWI5ZTliNTIzZmUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzgxNDMyMTA4LCJpYXQiOjE3ODE0Mjg1MDgsImVtYWlsIjoidml2YWFuLmphaW4yNDZAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbCI6InZpdmFhbi5qYWluMjQ2QGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaG9uZV92ZXJpZmllZCI6ZmFsc2UsInN1YiI6IjYzMGQ3NzYzLTQ5NjctNDgxYS04M2U5LWExYjllOWI1MjNmZSJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzgwNzUwMTEwfV0sInNlc3Npb25faWQiOiJkNjEzMDYwNy1jMmRkLTRkMTMtYmJjNi1mMzg1NDgyZTAxMGYiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.oOmtdQ563OcDjGLZNCuiPHmZsz1flxqL7MwfNiSZTHqFzE42iWa8f6wD0JzLW1mzkGb3yXRqscRnsRSxO51R6Q"
 
 # Separate Groq key for eval — keeps eval traffic from competing with
 # production's daily token quota. Get one free at console.groq.com.
-
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 if not GROQ_API_KEY:
@@ -205,7 +206,7 @@ print(f"\n[Eval] Scoring {len(records)} records via RAGAS + Groq (~1-3 min)...")
 # llama-3.1-8b-instant has much higher free-tier TPM/TPD than the 70b model --
 # avoids the rate-limit cascade that corrupted the previous run.
 _llm = LangchainLLMWrapper(ChatGroq(
-    model="llama-3.1-8b-instant", temperature=0, api_key=GROQ_API_KEY,
+    model="openai/gpt-oss-120b", temperature=0, api_key=GROQ_API_KEY,
     max_retries=5
 ))
 for metric in [faithfulness, answer_relevancy, context_precision, context_recall]:
