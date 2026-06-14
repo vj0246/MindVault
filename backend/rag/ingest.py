@@ -241,6 +241,12 @@ def chunk_documents(pages, filename="") -> list:
 # ─────────────────────────────────────────────
 
 def embed_and_store(chunks, document_id: str, filename: str, user_id: str):
+    if not chunks:
+        # fastembed.embed([]) on an empty list can misbehave -- guard explicitly.
+        # Caller (ingest_document) already raises before reaching here, but
+        # this keeps the function safe if called directly.
+        return
+
     supabase = get_supabase()
     texts = [c.page_content for c in chunks]
     embeddings = list(EMBED_MODEL.embed(texts))
@@ -269,8 +275,24 @@ def ingest_document(file_path: str, document_id: str, user_id: str, **kwargs):
     pages = load_document(file_path)
     print(f"[Ingest] Loaded {len(pages)} pages/sections")
 
+    # Detect empty/unreadable documents early (e.g. scanned PDFs with no
+    # extractable text -- PyPDFLoader returns pages with empty page_content).
+    total_chars = sum(len(p.page_content.strip()) for p in pages)
+    if total_chars == 0:
+        raise ValueError(
+            "No extractable text found in this document. "
+            "If this is a scanned PDF, try uploading a text-based PDF or "
+            "an image of the page instead."
+        )
+
     filename = os.path.basename(file_path)
     chunks = chunk_documents(pages, filename=filename)
+
+    if not chunks:
+        raise ValueError(
+            "Document text was too short or could not be split into chunks. "
+            "Try uploading a document with more content."
+        )
 
     embed_and_store(chunks, document_id, filename, user_id)
     print(f"[Ingest] Done.")

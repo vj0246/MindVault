@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -46,8 +46,18 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 def root():
     return {"status": "MindVault is running"}
 
+def _build_graph_for_chunks(chunks, filename: str, user_id: str):
+    """Runs in the background after /upload responds. Extracts entities and
+    relationships from up to 10 chunks and adds them to the knowledge graph."""
+    for chunk in chunks:
+        try:
+            extracted = extract_entities_and_relations(chunk.page_content, source=filename)
+            add_to_graph(extracted, user_id=user_id)
+        except Exception as e:
+            print(f"[Graph] Background extraction failed for a chunk: {e}")
+
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...), user=Depends(get_current_user)):
+async def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks = None, user=Depends(get_current_user)):
     try:
         sb = get_supabase()
         ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx", ".doc", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}
@@ -72,31 +82,38 @@ async def upload_file(file: UploadFile = File(...), user=Depends(get_current_use
             user_id=str(user.id)
         )
 
-        chunks = ingest_document(file_path, document_id=actual_document_id, user_id=str(user.id))
+        try:
+            chunks = ingest_document(file_path, document_id=actual_document_id, user_id=str(user.id))
+        except ValueError as e:
+            # Clean, user-facing error (empty/unreadable document) -- remove
+            # the orphaned chunk_count=0 row created by log_document above
+            # so it doesn't clutter the user's sidebar with a useless doc.
+            sb.table("documents").delete().eq("id", actual_document_id).execute()
+            raise HTTPException(status_code=400, detail=str(e))
 
         sb.table("documents").update(
             {"chunk_count": len(chunks)}
         ).eq("id", actual_document_id).execute()
 
-        for chunk in chunks[:10]:
-            extracted = extract_entities_and_relations(
-                chunk.page_content,
-                source=file.filename
+        # Graph extraction runs AFTER the response is sent -- up to 10
+        # sequential Groq calls here were adding 10-30s to upload latency
+        # and risking Render's proxy timeout (502s on larger documents).
+        if background_tasks is not None:
+            background_tasks.add_task(
+                _build_graph_for_chunks, chunks[:10], file.filename, str(user.id)
             )
-            add_to_graph(extracted, user_id=str(user.id))
 
         return {
             "message": f"{file.filename} ingested successfully.",
             "chunks": len(chunks),
             "filename": file.filename
         }
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
-
-class RenameRequest(BaseModel):
-    name: str
 
 class RenameRequest(BaseModel):
     name: str

@@ -8,12 +8,23 @@ import os
 
 load_dotenv()
 
+_EXTRACTOR_LLM = None
+
+def _get_extractor_llm():
+    # Cached singleton -- was creating a new ChatGroq (+ httpx pool) on every
+    # call. Upload loops this up to 10x, so 10 fresh connection pools per
+    # upload. Reuse one instance instead.
+    global _EXTRACTOR_LLM
+    if _EXTRACTOR_LLM is None:
+        _EXTRACTOR_LLM = ChatGroq(
+            model="llama-3.3-70b-versatile",
+            temperature=0,
+            api_key=os.environ["GROQ_API_KEY"]
+        )
+    return _EXTRACTOR_LLM
+
 def extract_entities_and_relations(text: str, source: str) -> dict:
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0,
-        api_key=os.environ["GROQ_API_KEY"]
-    )
+    llm = _get_extractor_llm()
 
     prompt = ChatPromptTemplate.from_template("""
 You are a knowledge graph builder. Extract information from the text below.
