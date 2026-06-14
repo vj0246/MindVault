@@ -57,7 +57,9 @@ def get_llm(temperature: float = 0.0):
 from rag.embedder import EMBED_MODEL
 
 def _rrf_merge(semantic: list, keyword: list, top_k: int, rrf_k: int = 60) -> list:
-    """Reciprocal Rank Fusion — merges two ranked lists into one."""
+    """Reciprocal Rank Fusion — merges two ranked lists into one.
+    Each returned chunk gets an 'rrf_score' field (raw RRF value,
+    0 to 2/(rrf_k+1)) so callers can measure cross-method agreement."""
     scores = {}
     chunk_map = {}
 
@@ -73,7 +75,12 @@ def _rrf_merge(semantic: list, keyword: list, top_k: int, rrf_k: int = 60) -> li
             chunk_map[key] = chunk
 
     ranked = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
-    return [chunk_map[k] for k in ranked[:top_k]]
+    result = []
+    for k in ranked[:top_k]:
+        chunk = chunk_map[k].copy()
+        chunk["rrf_score"] = scores[k]
+        result.append(chunk)
+    return result
 
 
 def retrieve_context(question: str, k: int = 5, user_id: str = None, document_ids: list = None) -> dict:
@@ -137,10 +144,28 @@ def retrieve_context(question: str, k: int = 5, user_id: str = None, document_id
         }
         for c in fused
     ]
-    sims = sorted([c.get("similarity", 0) for c in fused if c.get("similarity", 0) > 0], reverse=True)[:3]
-    if sims:
-        avg_sim = sum(sims) / len(sims)
-        confidence = round(min(1.0, avg_sim * (1 + 0.08 * min(len(fused) - 1, 4))), 3)
+    # Confidence: combines BOTH retrieval signals.
+    # - normalized_rrf (0-1): how strongly semantic + keyword AGREE on this chunk.
+    #   1.0 = ranked #1 in both lists. 0.5 = ranked #1 in only one list.
+    # - similarity (cosine, 0-1): raw semantic relevance, when available.
+    # Blended 50/50 so a chunk found by both methods AND highly similar
+    # scores higher than one found by either signal alone.
+    RRF_K = 60
+    max_rrf = 2 / (RRF_K + 1)  # theoretical max: rank 0 in both lists
+
+    chunk_scores = []
+    for c in fused:
+        normalized_rrf = min(1.0, c.get("rrf_score", 0) / max_rrf)
+        sim = c.get("similarity")
+        if sim is not None and sim > 0:
+            chunk_scores.append(0.5 * sim + 0.5 * normalized_rrf)
+        else:
+            chunk_scores.append(normalized_rrf)
+
+    top3 = sorted(chunk_scores, reverse=True)[:3]
+    if top3:
+        avg_score = sum(top3) / len(top3)
+        confidence = round(min(1.0, avg_score * (1 + 0.08 * min(len(fused) - 1, 4))), 3)
     else:
         confidence = 0.0
     return {"context": context, "sources": sources, "chunks": chunks, "confidence": confidence}

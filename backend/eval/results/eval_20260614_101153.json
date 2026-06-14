@@ -1,0 +1,270 @@
+{
+  "timestamp": "20260614_101153",
+  "scores": {
+    "faithfulness": 0.6607,
+    "answer_relevancy": 0.3098,
+    "context_precision": 0.4,
+    "context_recall": 0.0
+  },
+  "overall": 0.3426,
+  "per_question": [
+    {
+      "question": "What is the difference between a program and a process?",
+      "answer": "**Similarities:**\n- Neither a program nor a process is explicitly defined in the given context, but both terms can be related to the implementation of AI systems in finance.\n\n**Differences:**\n- The context does not provide a direct comparison between a program and a process, but it can be inferred that a program might refer to the AI systems used in finance, while a process might refer to the series of actions or operations, such as credit scoring and loan approval.\n\n**Key Insight:**\nThe context does not provide a clear distinction between a program and a process, but it suggests that AI systems, which could be considered a program, have improved various financial processes, such as credit scoring and loan approval.",
+      "contexts": [
+        "systems provide instant responses to inquiries, assist with account management, \nrecommend financial products, and offer support at any time of day. This reduces \noperational costs while improving cus"
+      ],
+      "ground_truth": "A program is a passive entity stored on disk. A process is an active entity running in memory. A program becomes a process when loaded into memory and execution begins.",
+      "confidence": 0.208,
+      "sources": [
+        "AI_Finance.pdf"
+      ]
+    },
+    {
+      "question": "How does a program become a process?",
+      "answer": "The conversation history does not provide information on the steps or mechanisms by which a computer program is executed and becomes an active process. The previous discussion only mentioned the similarities and differences between a program and a process in a general sense, without providing specific details on the execution process.",
+      "contexts": [
+        "The conversation history does not provide information on the steps or mechanisms by which a computer program is executed and becomes an active process. The previous discussion only mentioned the similarities and differences between a program and a process in a general sense, without providing specific details on the execution process."
+      ],
+      "ground_truth": "When execution starts, the OS loads the program into RAM, allocates resources, creates a Process Control Block (PCB), and assigns the CPU for execution.",
+      "confidence": 0.0,
+      "sources": [
+        "conversation history"
+      ]
+    },
+    {
+      "question": "Can one program create multiple processes? Give an example.",
+      "answer": "This isn't in your uploaded documents. [AI_Finance.pdf]",
+      "contexts": [
+        "systems provide instant responses to inquiries, assist with account management, \nrecommend financial products, and offer support at any time of day. This reduces \noperational costs while improving cus"
+      ],
+      "ground_truth": "Yes. Multiple users opening the same web browser creates separate processes. Each has its own memory space, registers, and program counter.",
+      "confidence": 0.22,
+      "sources": [
+        "AI_Finance.pdf"
+      ]
+    },
+    {
+      "question": "What are the five states of a process?",
+      "answer": "This isn't in your uploaded documents.",
+      "contexts": [
+        "This isn't in your uploaded documents."
+      ],
+      "ground_truth": "New, Ready, Running, Waiting (Blocked), and Terminated (Exit).",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What does the Running state of a process mean?",
+      "answer": "In the context of operating system process management, the Running state of a process means that the process is currently being executed by the CPU, using system resources to perform its tasks [notes.pdf].",
+      "contexts": [
+        "In the context of operating system process management, the Running state of a process means that the process is currently being executed by the CPU, using system resources to perform its tasks [notes.pdf]."
+      ],
+      "ground_truth": "The process is currently being executed by the CPU. Only one process per CPU can be in the running state at a time.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What triggers a transition from Running to Waiting state?",
+      "answer": "The transition from the Running state to the Waiting state of a process is triggered when the process is waiting for an I/O operation to complete or for some other event to occur [notes.pdf].",
+      "contexts": [
+        "The transition from the Running state to the Waiting state of a process is triggered when the process is waiting for an I/O operation to complete or for some other event to occur [notes.pdf]."
+      ],
+      "ground_truth": "The process moves to Waiting when it requests I/O, file access, or waits for user input.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What is a Process Control Block (PCB) and what does it store?",
+      "answer": "A Process Control Block (PCB) is a data structure that stores information about a process to facilitate its execution and state transitions. It stores information such as process ID, program counter, registers, memory pointers, and state (e.g., Running, Waiting) to manage process execution and transitions, like from Running to Waiting state [notes.pdf].",
+      "contexts": [
+        "A Process Control Block (PCB) is a data structure that stores information about a process to facilitate its execution and state transitions. It stores information such as process ID, program counter, registers, memory pointers, and state (e.g., Running, Waiting) to manage process execution and transitions, like from Running to Waiting state [notes.pdf]."
+      ],
+      "ground_truth": "A PCB is a data structure used by the OS to track process information. It stores process state, PID, program counter, register values, memory limits, CPU quantum, priority, and list of open files.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What happens after a process terminates?",
+      "answer": "After a process terminates, its associated Process Control Block (PCB) is deleted, and the information stored in the PCB, such as process ID, program counter, registers, memory pointers, and state, is discarded [notes.pdf].",
+      "contexts": [
+        "After a process terminates, its associated Process Control Block (PCB) is deleted, and the information stored in the PCB, such as process ID, program counter, registers, memory pointers, and state, is discarded [notes.pdf]."
+      ],
+      "ground_truth": "Memory and resources are released, and the PCB is deleted.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What is process suspension and resumption?",
+      "answer": "This isn't in your uploaded documents.",
+      "contexts": [
+        "Charges.\n\u25c6 You can go to  to check your refund status, if in future your \ufb02ight is cancelled by the\nairline or you have cancelled the \ufb02ight directly with the airline. Please bookmark  for more\ndetails."
+      ],
+      "ground_truth": "The OS may temporarily suspend a process to manage memory by storing it on disk. It can later be resumed and moved back to the ready state.",
+      "confidence": 0.249,
+      "sources": [
+        "Vivaan_Andaman_Flight.pdf"
+      ]
+    },
+    {
+      "question": "What is a thread and why is it called a lightweight process?",
+      "answer": "This isn't in your uploaded documents.",
+      "contexts": [
+        "This isn't in your uploaded documents."
+      ],
+      "ground_truth": "A thread is the smallest unit of execution within a process. It is called a lightweight process (LWP) because it requires fewer resources than a full process.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What does a thread have of its own vs what it shares with its process?",
+      "answer": "Nothing relevant found in your documents.",
+      "contexts": [
+        "Nothing relevant found in your documents."
+      ],
+      "ground_truth": "Each thread has its own program counter, register set, and stack. Threads share the code section, data section, heap memory, and open files.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What are User-Level Threads (ULT) and their main disadvantage?",
+      "answer": "User-Level Threads (ULT) are not defined in the given context, but generally, they refer to threads managed by the application itself. The primary disadvantage is not specified in the context, however, it can be inferred that one disadvantage is the lack of support from the operating system [no source file provided as no relevant information is available].",
+      "contexts": [
+        "User-Level Threads (ULT) are not defined in the given context, but generally, they refer to threads managed by the application itself. The primary disadvantage is not specified in the context, however, it can be inferred that one disadvantage is the lack of support from the operating system [no source file provided as no relevant information is available]."
+      ],
+      "ground_truth": "ULTs are managed in user space by a thread library without kernel involvement. Main disadvantage: blocking system call blocks the entire process.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "How do Kernel-Level Threads (KLT) differ from User-Level Threads?",
+      "answer": "Nothing relevant found in your documents.",
+      "contexts": [
+        "Nothing relevant found in your documents."
+      ],
+      "ground_truth": "KLTs are managed by the OS kernel. A blocked KLT does not stop other threads. They support true parallelism but have slower context switching than ULTs.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What is the Many-to-Many thread model?",
+      "answer": "The Many-to-Many thread model maps many user-level threads to many kernel-level threads. This is in contrast to the One-to-One model, which maps one user-level thread to one kernel-level thread, and the Many-to-One model, which maps many user-level threads to one kernel-level thread [no source file provided as no relevant information is available].",
+      "contexts": [
+        "The Many-to-Many thread model maps many user-level threads to many kernel-level threads. This is in contrast to the One-to-One model, which maps one user-level thread to one kernel-level thread, and the Many-to-One model, which maps many user-level threads to one kernel-level thread [no source file provided as no relevant information is available]."
+      ],
+      "ground_truth": "Many user-level threads mapped to many kernel threads. Flexible, supports better concurrency than Many-to-One. A compromise between Many-to-One and One-to-One.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What is a race condition?",
+      "answer": "ERROR: HTTP 502: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "A race condition occurs when the final outcome depends on which process executes first. Two or more processes access shared data simultaneously without proper control.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What is deadlock in an operating system?",
+      "answer": "ERROR: HTTP 502: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "Deadlock occurs when two or more processes are waiting for each other's resources and none can proceed. All involved processes remain blocked permanently.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What is starvation and what causes it?",
+      "answer": "ERROR: HTTP 502: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "Starvation happens when a process never gets required resources. Caused by improper scheduling where high-priority processes continuously get CPU time.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What are the three requirements for a correct critical section solution?",
+      "answer": "ERROR: HTTP 503: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "1) Mutual Exclusion \u2014 only one process in critical section at a time. 2) Progress \u2014 selection cannot be postponed indefinitely. 3) Bounded Waiting \u2014 limit on how many times others enter before a waiting process gets its turn.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What is a semaphore and what two atomic operations does it use?",
+      "answer": "ERROR: HTTP 503: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "A semaphore is a synchronization integer variable. It uses wait(S) \u2014 decrements, blocks if < 0 \u2014 and signal(S) \u2014 increments and wakes a waiting process.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What is the difference between a counting semaphore and a binary semaphore?",
+      "answer": "ERROR: HTTP 503: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "Counting semaphore ranges from 0 to n, manages multiple resource instances. Binary semaphore has only 0 or 1, used for mutual exclusion like a mutex.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What are the limitations of semaphores?",
+      "answer": "ERROR: HTTP 503: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "Priority inversion, deadlock risk if misused, complex to manage, and busy waiting in basic implementations.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "How does a mutex differ from a binary semaphore?",
+      "answer": "ERROR: HTTP 503: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "A mutex enforces strict ownership \u2014 only the thread that locks it can unlock it. Uses priority inheritance to avoid priority inversion. Binary semaphore has no ownership enforcement.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What three semaphores are used in the Producer-Consumer solution?",
+      "answer": "ERROR: HTTP 503: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "mutex \u2014 mutual exclusion on buffer. full \u2014 counts filled slots, prevents consumer from empty buffer. empty \u2014 counts empty slots, prevents producer from overfilling.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "In the Readers-Writers problem, what is Readers Preference and its drawback?",
+      "answer": "ERROR: HTTP 503: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "Readers Preference gives priority to readers \u2014 no reader waits if resource is open for reading. Drawback: writers may starve if readers keep arriving.",
+      "confidence": 0.0,
+      "sources": []
+    },
+    {
+      "question": "What is the Banker's Algorithm for deadlock avoidance?",
+      "answer": "ERROR: HTTP 503: ",
+      "contexts": [
+        "ERROR"
+      ],
+      "ground_truth": "The document does not contain information about the Banker's Algorithm. A correct answer should say this topic is not in the uploaded documents.",
+      "confidence": 0.0,
+      "sources": []
+    }
+  ]
+}
