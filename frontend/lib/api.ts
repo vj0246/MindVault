@@ -56,7 +56,7 @@ export async function getGraphTopic(topic: string) {
 }
 
 export async function clearSession(sessionId: string) {
-  const res = await api.delete(`/session/${sessionId}`)
+  const res = await api.delete(`/sessions/${sessionId}/messages`)
   return res.data
 }
 export async function listSessions() {

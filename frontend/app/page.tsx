@@ -589,9 +589,41 @@ export default function Home() {
     } catch { showToast('Export failed', 'error') }
   }
 
-  const handleNewSession = () => {
-    setSessionId(genId()); setMessages([]); setGraphOpen(false)
-    showToast('New session started', 'info')
+  const handleNewSession = async () => {
+    try {
+      const s = await createSession()
+      setSessionId(s.session_id)
+      if (userId) localStorage.setItem(`mv_session_${userId}`, s.session_id)
+      setMessages([])
+      setGraphOpen(false)
+      await loadSessions()
+      showToast('New session started', 'info')
+    } catch { showToast('Could not start new session', 'error') }
+  }
+
+  const handleSelectSession = async (id: string) => {
+    setSessionId(id)
+    if (userId) localStorage.setItem(`mv_session_${userId}`, id)
+    setGraphOpen(false)
+    try {
+      const data = await getSessionHistory(id)
+      const history = data.history || []
+      setMessages(history.map((m: any) => ({
+        id: genId(),
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp,
+        sources: [],
+      })))
+    } catch { setMessages([]) }
+  }
+
+  const handleDeleteSession = async (id: string) => {
+    try {
+      await deleteSession(id)
+      setSessions(prev => prev.filter(s => s.id !== id))
+      if (id === sessionId) handleNewSession()
+    } catch { /* silent */ }
   }
 
   const handleToggleDoc = (id: string) => {

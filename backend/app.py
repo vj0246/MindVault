@@ -210,6 +210,12 @@ def get_history_route(session_id: str, user=Depends(get_current_user)):
     history = get_session_history(session_id, str(user.id))
     return {"history": history}
 
+@app.delete("/sessions/{session_id}/messages")
+def clear_session_messages_route(session_id: str, user=Depends(get_current_user)):
+    """Clears message history but keeps the session itself (used by 'Clear History')."""
+    clear_session_messages(session_id, str(user.id))
+    return {"ok": True}
+
 @app.delete("/sessions/{session_id}")
 def delete_session_route(session_id: str, user=Depends(get_current_user)):
     delete_chat_session(session_id, str(user.id))
