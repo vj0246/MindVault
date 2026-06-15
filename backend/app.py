@@ -1,13 +1,13 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import os
 import uuid
 from rag.db import get_supabase
-from rag.ingest import ingest_document
-from rag.retrieve1 import query_rag
+from rag.ingest import ingest_document, load_document, load_image_via_groq, IMAGE_EXTENSIONS
+from rag.retrieve1 import query_rag, query_with_attachment
 from rag.memory import (
     get_session_history, save_session_message, clear_session_messages,
     list_chat_sessions, create_chat_session, rename_chat_session, delete_chat_session
@@ -160,14 +160,159 @@ def query(req: QueryRequest, user=Depends(get_current_user)):
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/query-with-attachment")
+async def query_with_attachment_route(
+    file: UploadFile = File(...),
+    question: str = Form(...),
+    session_id: str = Form("default_session"),
+    mode: str = Form("default"),
+    document_ids: str = Form("[]"),
+    user=Depends(get_current_user)
+):
+    """One-off query with an attached image/document. Extracted content is
+    used only for this single answer -- not stored in the user's vault."""
+    import json
+    import tempfile
+
+    try:
+        if not question.strip():
+            raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+        ext = os.path.splitext(file.filename)[1].lower()
+        ALLOWED = {".pdf", ".txt", ".md", ".docx", ".doc", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}
+        if ext not in ALLOWED:
+            raise HTTPException(status_code=400, detail=f"Unsupported attachment type: {ext}")
+
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Attached file is empty.")
+
+        # Save to a temp file -- load_document / load_image_via_groq need a path
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        try:
+            if ext in IMAGE_EXTENSIONS:
+                docs = load_image_via_groq(tmp_path)
+            else:
+                docs = load_document(tmp_path)
+            attachment_text = "\n\n".join(d.page_content for d in docs)
+        finally:
+            os.unlink(tmp_path)
+
+        try:
+            doc_ids = json.loads(document_ids) if document_ids else []
+        except Exception:
+            doc_ids = []
+
+        history = get_session_history(session_id, user_id=str(user.id))
+        result = query_with_attachment(
+            question=question,
+            attachment_text=attachment_text,
+            attachment_name=file.filename,
+            history=history,
+            mode=mode,
+            user_id=str(user.id),
+            document_ids=doc_ids or None
+        )
+
+        # Store the question with a marker so history shows the attachment was used
+        user_msg = f"[Attached: {file.filename}] {question}"
+        save_session_message(session_id, role="user", content=user_msg, user_id=str(user.id))
+        save_session_message(session_id, role="assistant", content=result["answer"], user_id=str(user.id))
+
+        return {
+            "answer": result["answer"],
+            "sources": result["sources"],
+            "chunks": result.get("chunks", []),
+            "confidence": result.get("confidence", 0.0),
+            "mode": mode,
+            "intent": result.get("intent", "answer"),
+            "related_concepts": result.get("related_concepts", [])
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/documents")
 def list_documents(user=Depends(get_current_user)):
     return {"documents": get_all_documents(user_id=str(user.id))}
+
+def _build_session_pdf(history: list, session_id: str) -> bytes:
+    """Builds a human-readable PDF transcript of a chat session."""
+    from fpdf import FPDF
+
+    pdf = FPDF(format="A4")
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.add_page()
+
+    def safe(text: str) -> str:
+        # Core PDF fonts only support latin-1. Replace anything outside that
+        # range (emojis, special bullets like the hex symbol, smart quotes,
+        # etc.) instead of crashing the export.
+        return text.encode("latin-1", "replace").decode("latin-1")
+
+    # Title
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_text_color(40, 40, 40)
+    pdf.cell(0, 12, "MindVault Session Export", ln=True)
+
+    # Meta
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(120, 120, 120)
+    pdf.cell(0, 6, safe(f"Session: {session_id}"), ln=True)
+    pdf.cell(0, 6, f"Messages: {len(history)}", ln=True)
+    pdf.ln(4)
+    pdf.set_draw_color(220, 220, 220)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(6)
+
+    for msg in history:
+        is_user = msg["role"] == "user"
+        label = "You" if is_user else "MindVault"
+        ts = msg.get("timestamp", "")
+
+        # Role label + timestamp
+        pdf.set_font("Helvetica", "B", 11)
+        if is_user:
+            pdf.set_text_color(40, 90, 200)
+        else:
+            pdf.set_text_color(70, 140, 110)
+        pdf.cell(0, 7, label, ln=True)
+
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(150, 150, 150)
+        pdf.cell(0, 5, safe(ts), ln=True)
+
+        # Message body
+        pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(30, 30, 30)
+        body = safe(msg["content"])
+        pdf.multi_cell(0, 6, body)
+        pdf.ln(4)
+
+    return bytes(pdf.output())
+
 
 @app.post("/export")
 def export_session(req: ExportRequest, user=Depends(get_current_user)):
     try:
         history = get_session_history(req.session_id, user_id=str(user.id))
+
+        if req.format == "pdf":
+            if not history:
+                history = [{"role": "assistant", "content": "No messages in this session.", "timestamp": ""}]
+            pdf_bytes = _build_session_pdf(history, req.session_id)
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="mindvault-{req.session_id[:8]}.pdf"'}
+            )
+
         if not history:
             return {"report": "# MindVault Session Export\n\n_No messages in this session._"}
 

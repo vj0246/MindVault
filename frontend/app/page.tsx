@@ -7,9 +7,12 @@ import GraphPanel from '../components/GraphPanel'
 import {
   uploadDocument,
   queryKnowledge,
+  queryWithAttachment,
   getDocuments,
   exportSession,
+  exportSessionPDF,
   getGraphTopic,
+  getFullGraph,
   clearSession,
   createSession,
   listSessions,
@@ -237,9 +240,9 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
-  sessionId: string; msgCount: number; onExport: () => void; onNewSession: () => void
+  sessionId: string; msgCount: number; onExport: () => void; onExportPDF: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
   selectedDocs: string[]; onToggleDoc: (id: string) => void
   sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
@@ -382,7 +385,10 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
           </div>
 
           <div className="flex flex-col gap-2">
-            <button className="action-btn" onClick={onExport}>↓ Export Session</button>
+            <div className="flex gap-2">
+              <button className="action-btn" style={{ flex: 1 }} onClick={onExport}>↓ MD</button>
+              <button className="action-btn" style={{ flex: 1 }} onClick={onExportPDF}>↓ PDF</button>
+            </div>
             <button className="action-btn" onClick={onNewSession}>+ New Session</button>
             <button className="action-btn danger" onClick={onClearSession}>✕ Clear History</button>
           </div>
@@ -450,6 +456,8 @@ export default function Home() {
   const [userId, setUserId] = useState<string>('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const attachRef = useRef<HTMLInputElement>(null)
+  const [attachedFile, setAttachedFile] = useState<File | null>(null)
   useEffect(() => {
   getSupabase().auth.getSession().then(({ data: { session } }) => {
     if (!session) { window.location.href = '/login'; return }
@@ -514,6 +522,24 @@ export default function Home() {
     }
   }
 
+  const handleViewFullGraph = async () => {
+    setGraphOpen(true)
+    setGraphTopic('Knowledge Graph')
+    setGraphLoading(true)
+    setGraphData(null)
+    try {
+      const data = await getFullGraph()
+      if (!data.nodes || data.nodes.length === 0) {
+        showToast('No graph data yet — upload documents to build the graph', 'info')
+      }
+      setGraphData(data)
+    } catch {
+      showToast('Graph fetch failed', 'error')
+    } finally {
+      setGraphLoading(false)
+    }
+  }
+
   const handleUpload = async (files: File[]) => {
     if (!files.length) return
     setUploading(true)
@@ -541,15 +567,22 @@ export default function Home() {
     const question = (text || input).trim()
     if (!question || loading || !sessionId) return
 
+    const fileToSend = attachedFile
+
     setMessages(prev => [...prev, {
-      id: genId(), role: 'user', content: question, timestamp: new Date().toISOString()
+      id: genId(), role: 'user',
+      content: fileToSend ? `📎 ${fileToSend.name}\n${question}` : question,
+      timestamp: new Date().toISOString()
     }])
     setInput('')
+    setAttachedFile(null)
     setLoading(true)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     try {
-      const result = await queryKnowledge(question, sessionId, mode, selectedDocs)
+      const result = fileToSend
+        ? await queryWithAttachment(question, sessionId, mode, selectedDocs, fileToSend)
+        : await queryKnowledge(question, sessionId, mode, selectedDocs)
       // Auto-name session from first message if still "New Chat"
       const activeSession = sessions.find(s => s.id === sessionId)
       if (!activeSession || activeSession.name === 'New Chat') {
@@ -576,7 +609,7 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
-  }, [input, loading, mode, sessionId])
+  }, [input, loading, mode, sessionId, attachedFile, selectedDocs, sessions])
 
   const handleExport = async () => {
     try {
@@ -585,8 +618,20 @@ export default function Home() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url; a.download = `mindvault-${sessionId.slice(0, 8)}.md`; a.click()
+      URL.revokeObjectURL(url)
       showToast('Session exported', 'success')
     } catch { showToast('Export failed', 'error') }
+  }
+
+  const handleExportPDF = async () => {
+    try {
+      const blob = await exportSessionPDF(sessionId)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `mindvault-${sessionId.slice(0, 8)}.pdf`; a.click()
+      URL.revokeObjectURL(url)
+      showToast('PDF exported', 'success')
+    } catch { showToast('PDF export failed', 'error') }
   }
 
   const handleNewSession = async () => {
@@ -646,7 +691,7 @@ export default function Home() {
       <Sidebar
         docs={docs} onUpload={handleUpload} uploading={uploading} uploadStatus={uploadStatus}
         sessionId={sessionId} msgCount={messages.length}
-        onExport={handleExport} onNewSession={handleNewSession} onClearSession={handleClearSession}
+        onExport={handleExport} onExportPDF={handleExportPDF} onNewSession={handleNewSession} onClearSession={handleClearSession}
         open={sidebarOpen} onClose={() => setSidebarOpen(false)}
         selectedDocs={selectedDocs} onToggleDoc={handleToggleDoc}
         sessions={sessions} onSelectSession={handleSelectSession} onDeleteSession={handleDeleteSession}
@@ -670,7 +715,7 @@ export default function Home() {
             </div>
             <button
               className="mode-tab"
-              onClick={() => handleViewGraph('process')}
+              onClick={handleViewFullGraph}
               style={{ marginLeft: 6, color: 'var(--accent3)', borderColor: 'rgba(126,184,164,0.3)' }}
             >
               ⬡ Graph
@@ -705,11 +750,46 @@ export default function Home() {
 
         {/* Input */}
         <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px', background: 'var(--bg)' }}>
+          {attachedFile && (
+            <div className="max-w-3xl mx-auto" style={{ marginBottom: 8 }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--accent)',
+                background: 'rgba(126,184,164,0.08)', border: '1px solid rgba(126,184,164,0.2)',
+                borderRadius: 6, padding: '4px 10px'
+              }}>
+                📎 {attachedFile.name}
+                <button onClick={() => setAttachedFile(null)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 12, padding: 0 }}
+                  title="Remove attachment">✕</button>
+              </span>
+            </div>
+          )}
           <div className="flex gap-2 items-end max-w-3xl mx-auto">
+            <input ref={attachRef} type="file" className="hidden"
+              accept=".pdf,.txt,.md,.docx,.doc,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) setAttachedFile(f)
+                if (attachRef.current) attachRef.current.value = ''
+              }} />
+            <button
+              onClick={() => attachRef.current?.click()}
+              disabled={loading || !sessionId}
+              title="Attach a file or image for this question"
+              style={{
+                flexShrink: 0, height: 46, width: 46, borderRadius: 10,
+                border: '1px solid var(--border)', background: 'var(--surface2)',
+                color: attachedFile ? 'var(--accent)' : 'var(--text3)',
+                fontSize: 16, cursor: 'pointer', display: 'flex',
+                alignItems: 'center', justifyContent: 'center'
+              }}>
+              📎
+            </button>
             <div className="flex-1">
               <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask your vault anything..."
+                placeholder={attachedFile ? "Ask something about this file..." : "Ask your vault anything..."}
                 rows={1} className="vault-input" style={{ minHeight: 46, maxHeight: 140 }}
                 onInput={(e) => {
                   const t = e.target as HTMLTextAreaElement
@@ -722,7 +802,7 @@ export default function Home() {
             </button>
           </div>
           <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'center', marginTop: 8, letterSpacing: '0.03em' }}>
-            Answers grounded in your documents · Encrypted · Private
+            {attachedFile ? 'Attachment used for this question only · Not saved to your vault' : 'Answers grounded in your documents · Encrypted · Private'}
           </p>
         </div>
       </main>

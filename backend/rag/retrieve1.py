@@ -439,6 +439,67 @@ Content:\n{context}\nTopic: {question}\nQuestions:
     })
     return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", []), "confidence": retrieved.get("confidence", 0.0)}
 
+def query_with_attachment(question: str, attachment_text: str, attachment_name: str,
+                           history: list = [], mode: str = "default",
+                           user_id: str = None, document_ids: list = None) -> dict:
+    """One-off query with an attached file (image/PDF/TXT/MD/DOCX) for THIS
+    message only -- not stored in the vector DB. Combines the attachment's
+    extracted content with normal RAG retrieval from the user's vault."""
+    llm = get_llm()
+
+    # Normal RAG retrieval still runs, so the attachment is *additional*
+    # context on top of the user's existing documents, not a replacement.
+    retrieved = retrieve_context(question, k=5, user_id=user_id, document_ids=document_ids)
+
+    # Cap attachment text -- vision descriptions are already capped at the
+    # source (max_tokens=2000 in load_image_via_groq); for text documents,
+    # truncate to keep the combined prompt a reasonable size.
+    attachment_text = (attachment_text or "").strip()[:4000]
+
+    combined_context_parts = []
+    if attachment_text:
+        combined_context_parts.append(f"[Attached File: {attachment_name}]\n{attachment_text}")
+    if retrieved["context"]:
+        combined_context_parts.append(retrieved["context"])
+    combined_context = "\n\n---\n\n".join(combined_context_parts) or "No relevant content found."
+
+    history_str = "\n".join([
+        f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+        for m in history[-4:]
+    ]) if history else "No history"
+
+    prompt = ChatPromptTemplate.from_template("""STRICT RULE: Use ONLY the context below. Never use outside knowledge. If the answer is not in context, respond EXACTLY: "This isn't in your uploaded documents or attached file." Cite the source after each fact in brackets -- use the attached file's name for content from it, or the document filename for content from the vault.
+
+Recent conversation:
+{history}
+
+Context:
+{context}
+
+Question: {question}
+
+Be clear and concise. Maximum 200 words.
+Answer:""")
+
+    answer = (prompt | llm | StrOutputParser()).invoke({
+        "history": history_str,
+        "context": combined_context,
+        "question": question
+    })
+
+    sources = list(retrieved.get("sources", []))
+    if attachment_text:
+        sources.insert(0, f"{attachment_name} (attached)")
+
+    return {
+        "answer": answer,
+        "sources": sources,
+        "chunks": retrieved.get("chunks", []),
+        "confidence": retrieved.get("confidence", 0.0),
+        "intent": "answer",
+        "related_concepts": []
+    }
+
 def query_rag(question: str, history: list = [], mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
     print(f"[Debug] question={question}, history={len(history)}")
 

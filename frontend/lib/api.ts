@@ -40,6 +40,24 @@ export async function queryKnowledge(question: string, sessionId: string, mode: 
   return res.data
 }
 
+export async function queryWithAttachment(question: string, sessionId: string, mode: string, documentIds: string[], file: File) {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('question', question)
+  form.append('session_id', sessionId)
+  form.append('mode', mode)
+  form.append('document_ids', JSON.stringify(documentIds))
+  const token = await getToken()
+  const res = await axios.post(`${BASE}/query-with-attachment`, form, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    timeout: 180000
+  })
+  return res.data
+}
+
 export async function getDocuments() {
   const res = await api.get('/documents')
   return res.data
@@ -50,8 +68,20 @@ export async function exportSession(sessionId: string) {
   return res.data
 }
 
+export async function exportSessionPDF(sessionId: string): Promise<Blob> {
+  const res = await api.post('/export', { session_id: sessionId, format: 'pdf' }, {
+    responseType: 'blob'
+  })
+  return res.data
+}
+
 export async function getGraphTopic(topic: string) {
   const res = await api.get(`/graph/${encodeURIComponent(topic)}`)
+  return res.data
+}
+
+export async function getFullGraph() {
+  const res = await api.get('/graph')
   return res.data
 }
 
