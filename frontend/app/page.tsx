@@ -185,10 +185,10 @@ function MessageBubble({ msg, onConceptClick }: {
 }) {
   if (msg.role === 'user') {
     return (
-      <div className="flex justify-end fade-up">
-        <div>
-          <div className="msg-user">
-            <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text)' }}>{msg.content}</p>
+      <div className="flex justify-end fade-up" style={{ width: '100%' }}>
+        <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+          <div className="msg-user" style={{ textAlign: 'left', display: 'inline-block', maxWidth: '100%' }}>
+            <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{msg.content}</p>
           </div>
           <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'right', marginTop: 4 }}>
             {timeStr(msg.timestamp)}

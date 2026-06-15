@@ -274,7 +274,11 @@ def _build_session_pdf(history: list, session_id: str) -> bytes:
     for msg in history:
         is_user = msg["role"] == "user"
         label = "You" if is_user else "MindVault"
-        ts = msg.get("timestamp", "")
+        # .get(..., "") only applies when the KEY is missing -- if Supabase
+        # returns timestamp/content as None (null), this is None, and
+        # None.encode() inside safe() would crash the whole export.
+        ts = msg.get("timestamp") or ""
+        content_raw = msg.get("content") or ""
 
         # Role label + timestamp
         pdf.set_font("Helvetica", "B", 11)
@@ -291,7 +295,7 @@ def _build_session_pdf(history: list, session_id: str) -> bytes:
         # Message body
         pdf.set_font("Helvetica", "", 11)
         pdf.set_text_color(30, 30, 30)
-        body = safe(msg["content"])
+        body = safe(content_raw)
         pdf.multi_cell(0, 6, body)
         pdf.ln(4)
 

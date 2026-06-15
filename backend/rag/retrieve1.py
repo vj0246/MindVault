@@ -456,25 +456,40 @@ def query_with_attachment(question: str, attachment_text: str, attachment_name: 
     # truncate to keep the combined prompt a reasonable size.
     attachment_text = (attachment_text or "").strip()[:4000]
 
-    combined_context_parts = []
-    if attachment_text:
-        combined_context_parts.append(f"[Attached File: {attachment_name}]\n{attachment_text}")
-    if retrieved["context"]:
-        combined_context_parts.append(retrieved["context"])
-    combined_context = "\n\n---\n\n".join(combined_context_parts) or "No relevant content found."
+    # Build two SEPARATE, clearly-labeled sections rather than merging into
+    # one blob. Mixing them caused the model to answer meta-questions about
+    # the attachment ("which document is this from?") using vault content
+    # instead of the attachment itself.
+    attachment_section = (
+        f"=== ATTACHED FILE: {attachment_name} ===\n{attachment_text}"
+        if attachment_text else
+        f"=== ATTACHED FILE: {attachment_name} ===\n(No readable content could be extracted from this file.)"
+    )
+    vault_section = (
+        f"=== YOUR VAULT DOCUMENTS ===\n{retrieved['context']}"
+        if retrieved["context"] else
+        "=== YOUR VAULT DOCUMENTS ===\n(No relevant content found in your vault.)"
+    )
 
     history_str = "\n".join([
         f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
         for m in history[-4:]
     ]) if history else "No history"
 
-    prompt = ChatPromptTemplate.from_template("""STRICT RULE: Use ONLY the context below. Never use outside knowledge. If the answer is not in context, respond EXACTLY: "This isn't in your uploaded documents or attached file." Cite the source after each fact in brackets -- use the attached file's name for content from it, or the document filename for content from the vault.
+    prompt = ChatPromptTemplate.from_template("""You have two sources of information below: an ATTACHED FILE the user just shared, and YOUR VAULT DOCUMENTS (the user's existing knowledge base).
+
+PRIORITY RULE: If the question asks about the attachment itself -- e.g. "what does this show", "describe this image", "what is this file", "which document does this belong to/match" -- answer ONLY from the ATTACHED FILE section. Do not guess a vault filename for content that is actually IN the attachment.
+
+For general knowledge questions, prefer YOUR VAULT DOCUMENTS, and use the attachment only as supporting context if relevant.
+
+STRICT RULE: Use ONLY the information in these two sections. Never use outside knowledge. If the answer isn't in either section, respond EXACTLY: "This isn't in your uploaded documents or attached file." Cite the source after each fact in brackets -- use the attached file's name for content from it, or the vault document's filename for content from there. Never cite a vault filename for something that came from the attachment.
+
+{attachment_section}
+
+{vault_section}
 
 Recent conversation:
 {history}
-
-Context:
-{context}
 
 Question: {question}
 
@@ -482,8 +497,9 @@ Be clear and concise. Maximum 200 words.
 Answer:""")
 
     answer = (prompt | llm | StrOutputParser()).invoke({
+        "attachment_section": attachment_section,
+        "vault_section": vault_section,
         "history": history_str,
-        "context": combined_context,
         "question": question
     })
 
