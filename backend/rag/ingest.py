@@ -257,6 +257,7 @@ def embed_and_store(chunks, document_id: str, filename: str, user_id: str):
             "content": chunk.page_content,
             "embedding": emb.tolist(),
             "chunk_index": i,
+            "page_number": chunk.metadata.get("page", 0),  # PyPDFLoader sets "page"; others default 0
             "filename": filename,
             "user_id": user_id
         }

@@ -8,6 +8,9 @@ import {
   uploadDocument,
   queryKnowledge,
   queryWithAttachment,
+  streamQuery,
+  shareSession,
+  unshareSession,
   getDocuments,
   exportSession,
   exportSessionPDF,
@@ -54,6 +57,8 @@ interface ChunkSource {
   content: string
   similarity: number
   filename: string
+  page_number?: number
+  chunk_index?: number
 }
 
 interface Toast {
@@ -132,6 +137,10 @@ function ConfidenceBadge({ score }: { score: number }) {
 
 function SourcePanel({ chunks }: { chunks: ChunkSource[] }) {
   const [open, setOpen] = useState(false)
+  const [copied, setCopied] = useState<number | null>(null)
+  const copyChunk = (text: string, i: number) => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(i); setTimeout(() => setCopied(null), 1500) })
+  }
   return (
     <div style={{ display: 'inline-block' }}>
       <button
@@ -157,16 +166,25 @@ function SourcePanel({ chunks }: { chunks: ChunkSource[] }) {
               borderBottom: i < chunks.length - 1 ? '1px solid var(--border)' : 'none'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--accent)', fontWeight: 600 }}>
-                  📄 {c.filename}
-                </span>
-                <span style={{
-                  fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--accent3)',
-                  background: 'rgba(126,184,164,0.1)', border: '1px solid rgba(126,184,164,0.2)',
-                  borderRadius: 3, padding: '1px 6px'
-                }}>
-                  {Math.round(c.similarity * 100)}% match
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--accent)', fontWeight: 600 }}>
+                    📄 {c.filename}
+                  </span>
+                  {(c.page_number != null && c.page_number > 0) && (
+                    <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--text3)', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 3, padding: '1px 5px' }}>
+                      p.{(c.page_number ?? 0) + 1}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--accent3)', background: 'rgba(126,184,164,0.1)', border: '1px solid rgba(126,184,164,0.2)', borderRadius: 3, padding: '1px 6px' }}>
+                    {Math.round(c.similarity * 100)}% match
+                  </span>
+                  <button onClick={() => copyChunk(c.content, i)} title="Copy chunk text — paste in PDF viewer to find passage"
+                    style={{ fontSize: 9, cursor: 'pointer', background: 'none', border: 'none', color: copied === i ? 'var(--accent)' : 'var(--text3)', padding: 0 }}>
+                    {copied === i ? '✓' : '⎘'}
+                  </button>
+                </div>
               </div>
               <p style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.55, fontFamily: 'IBM Plex Mono' }}>
                 {c.content}{c.content.length >= 200 ? '…' : ''}
@@ -240,12 +258,13 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onExportPDF: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
   selectedDocs: string[]; onToggleDoc: (id: string) => void
   sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
+  onShare: (id: string) => void; sharingId: string | null
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -337,11 +356,18 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
                     fontFamily: 'IBM Plex Mono'
                   }}>
-                    {s.name.slice(0, 32)}{s.name.length > 32 ? '…' : ''}
+                    {s.name.slice(0, 28)}{s.name.length > 28 ? '…' : ''}
                   </span>
-                  <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }}
-                    style={{ fontSize: 10, color: 'var(--text3)', background: 'none',
-                             border: 'none', cursor: 'pointer', padding: '0 4px', flexShrink: 0 }}>✕</button>
+                  <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                    <button onClick={e => { e.stopPropagation(); onShare(s.id) }}
+                      disabled={sharingId === s.id}
+                      title="Copy share link"
+                      style={{ fontSize: 10, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px' }}>
+                      {sharingId === s.id ? '…' : '🔗'}
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }}
+                      style={{ fontSize: 10, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px' }}>✕</button>
+                  </div>
                 </div>
               ))}
               {sessions.length === 0 && (
@@ -454,6 +480,8 @@ export default function Home() {
   const [selectedDocs, setSelectedDocs] = useState<string[]>([])
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [userId, setUserId] = useState<string>('')
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [sharingId, setSharingId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const attachRef = useRef<HTMLInputElement>(null)
@@ -568,47 +596,81 @@ export default function Home() {
     if (!question || loading || !sessionId) return
 
     const fileToSend = attachedFile
+    const userContent = fileToSend ? `📎 ${fileToSend.name}\n${question}` : question
+    const assistantId = genId()
 
-    setMessages(prev => [...prev, {
-      id: genId(), role: 'user',
-      content: fileToSend ? `📎 ${fileToSend.name}\n${question}` : question,
-      timestamp: new Date().toISOString()
-    }])
+    setMessages(prev => [
+      ...prev,
+      { id: genId(), role: 'user', content: userContent, timestamp: new Date().toISOString() },
+      { id: assistantId, role: 'assistant', content: '', timestamp: new Date().toISOString() }
+    ])
     setInput('')
     setAttachedFile(null)
     setLoading(true)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
-    try {
-      const result = fileToSend
-        ? await queryWithAttachment(question, sessionId, mode, selectedDocs, fileToSend)
-        : await queryKnowledge(question, sessionId, mode, selectedDocs)
-      // Auto-name session from first message if still "New Chat"
-      const activeSession = sessions.find(s => s.id === sessionId)
-      if (!activeSession || activeSession.name === 'New Chat') {
-        const autoName = question.slice(0, 45)
-        renameSession(sessionId, autoName).then(() => loadSessions()).catch(() => {})
-      }
-      setMessages(prev => [...prev, {
-        id: genId(), role: 'assistant',
-        content: result.answer || 'No answer returned.',
-        sources: result.sources || [],
-        chunks: result.chunks || [],
-        confidence: result.confidence ?? undefined,
-        intent: result.intent,
-        related_concepts: result.related_concepts || [],
-        timestamp: new Date().toISOString(),
-      }])
-    } catch {
-      setMessages(prev => [...prev, {
-        id: genId(), role: 'assistant',
-        content: 'Could not reach MindVault. Please try again.',
-        timestamp: new Date().toISOString(),
-      }])
-      showToast('Backend unreachable', 'error')
-    } finally {
-      setLoading(false)
+    if (fileToSend) {
+      // Attachment: use non-streaming path (multipart/form-data can't stream easily)
+      try {
+        const result = await queryWithAttachment(question, sessionId, mode, selectedDocs, fileToSend)
+        setMessages(prev => prev.map(m => m.id === assistantId ? {
+          ...m,
+          content: result.answer || 'No answer returned.',
+          sources: result.sources || [],
+          chunks: result.chunks || [],
+          confidence: result.confidence ?? undefined,
+          intent: result.intent,
+          related_concepts: result.related_concepts || [],
+        } : m))
+      } catch {
+        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: 'Could not reach MindVault. Please try again.' } : m))
+        showToast('Backend unreachable', 'error')
+      } finally { setLoading(false) }
+      return
     }
+
+    // Normal query: SSE streaming
+    const { getSupabase: _sb } = await import('../lib/supabase')
+    const { data: { session: _session } } = await _sb().auth.getSession()
+    const token = _session?.access_token || ''
+
+    const cancel = streamQuery(
+      question, sessionId, mode, selectedDocs, token,
+      (meta) => {
+        setMessages(prev => prev.map(m => m.id === assistantId ? {
+          ...m,
+          sources: meta.sources || [],
+          chunks: meta.chunks || [],
+          confidence: meta.confidence ?? undefined,
+          intent: meta.intent,
+        } : m))
+        // Auto-name session
+        const activeSession = sessions.find(s => s.id === sessionId)
+        if (!activeSession || activeSession.name === 'New Chat') {
+          renameSession(sessionId, question.slice(0, 45)).then(() => loadSessions()).catch(() => {})
+        }
+      },
+      (tokenText) => {
+        setMessages(prev => prev.map(m => m.id === assistantId
+          ? { ...m, content: (m.content || '') + tokenText }
+          : m))
+      },
+      (done) => {
+        setMessages(prev => prev.map(m => m.id === assistantId ? {
+          ...m,
+          related_concepts: done.related_concepts || [],
+        } : m))
+        setLoading(false)
+      },
+      (err) => {
+        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: `Error: ${err}` } : m))
+        showToast('Stream failed', 'error')
+        setLoading(false)
+      }
+    )
+
+    // Cleanup on unmount (rare but safe)
+    return cancel
   }, [input, loading, mode, sessionId, attachedFile, selectedDocs, sessions])
 
   const handleExport = async () => {
@@ -671,6 +733,25 @@ export default function Home() {
     } catch { /* silent */ }
   }
 
+  const handleShare = async (id: string) => {
+    try {
+      setSharingId(id)
+      const data = await shareSession(id)
+      setShareUrl(data.share_url)
+      await navigator.clipboard.writeText(data.share_url)
+      showToast('Share link copied to clipboard!', 'success')
+    } catch { showToast('Could not generate share link', 'error') }
+    finally { setSharingId(null) }
+  }
+
+  const handleUnshare = async (id: string) => {
+    try {
+      await unshareSession(id)
+      setShareUrl(null)
+      showToast('Share link revoked', 'info')
+    } catch { /* silent */ }
+  }
+
   const handleToggleDoc = (id: string) => {
     setSelectedDocs(prev =>
       prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
@@ -695,6 +776,7 @@ export default function Home() {
         open={sidebarOpen} onClose={() => setSidebarOpen(false)}
         selectedDocs={selectedDocs} onToggleDoc={handleToggleDoc}
         sessions={sessions} onSelectSession={handleSelectSession} onDeleteSession={handleDeleteSession}
+        onShare={handleShare} sharingId={sharingId}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--bg)' }}>

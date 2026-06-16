@@ -1,13 +1,13 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import os
 import uuid
 from rag.db import get_supabase
 from rag.ingest import ingest_document, load_document, load_image_via_groq, IMAGE_EXTENSIONS
-from rag.retrieve1 import query_rag, query_with_attachment
+from rag.retrieve1 import query_rag, query_with_attachment, stream_rag
 from rag.memory import (
     get_session_history, save_session_message, clear_session_messages,
     list_chat_sessions, create_chat_session, rename_chat_session, delete_chat_session
@@ -159,6 +159,44 @@ def query(req: QueryRequest, user=Depends(get_current_user)):
         import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/query/stream")
+async def query_stream(req: QueryRequest, user=Depends(get_current_user)):
+    """Streaming version of /query. Returns SSE (text/event-stream).
+    Events:
+      {"type":"meta",  "sources":[...], "intent":"...", "confidence":0.8, "chunks":[...]}
+      {"type":"token", "text":"hello "}
+      {"type":"done",  "related_concepts":[...], "full_answer":"..."}
+    Frontend should accumulate tokens, then save full_answer from done event.
+    """
+    history = get_session_history(req.session_id, user_id=str(user.id))
+
+    async def event_generator():
+        full_answer = ""
+        try:
+            for event in stream_rag(
+                question=req.question,
+                history=history,
+                mode=req.mode,
+                user_id=str(user.id),
+                document_ids=req.document_ids or None
+            ):
+                if '"type": "done"' in event:
+                    import json as _json
+                    data = _json.loads(event.replace("data: ", "").strip())
+                    full_answer = data.get("full_answer", "")
+                yield event
+        except Exception as e:
+            import json as _json
+            yield f'data: {_json.dumps({"type": "error", "message": str(e)})}\n\n'
+
+        # Save to session history after stream completes
+        if full_answer:
+            save_session_message(req.session_id, role="user", content=req.question, user_id=str(user.id))
+            save_session_message(req.session_id, role="assistant", content=full_answer, user_id=str(user.id))
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 @app.post("/query-with-attachment")
 async def query_with_attachment_route(
@@ -369,6 +407,25 @@ def clear_session_messages_route(session_id: str, user=Depends(get_current_user)
 def delete_session_route(session_id: str, user=Depends(get_current_user)):
     delete_chat_session(session_id, str(user.id))
     return {"ok": True}
+
+@app.post("/sessions/{session_id}/share")
+def share_session(session_id: str, user=Depends(get_current_user)):
+    token = generate_share_token(session_id, str(user.id))
+    base_url = os.environ.get("FRONTEND_URL", "https://mind-vault-psi.vercel.app")
+    return {"share_url": f"{base_url}/share/{token}", "token": token}
+
+@app.delete("/sessions/{session_id}/share")
+def unshare_session(session_id: str, user=Depends(get_current_user)):
+    revoke_share_token(session_id, str(user.id))
+    return {"ok": True}
+
+@app.get("/share/{token}")
+def get_shared_session_route(token: str):
+    """Public endpoint — no auth required."""
+    data = get_shared_session(token)
+    if not data:
+        raise HTTPException(status_code=404, detail="Shared session not found or access revoked.")
+    return data
 
 @app.get("/graph/{topic}")
 def get_graph_topic(topic: str, user=Depends(get_current_user)):

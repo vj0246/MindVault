@@ -158,7 +158,9 @@ def retrieve_context(question: str, k: int = 5, user_id: str = None, document_id
         {
             "content": c["content"][:200],
             "similarity": round(c.get("similarity", c.get("rank", 0)), 3),
-            "filename": c.get("filename", "Uploaded Document")
+            "filename": c.get("filename", "Uploaded Document"),
+            "page_number": c.get("page_number", 0),
+            "chunk_index": c.get("chunk_index", 0),
         }
         for c in fused
     ]
@@ -605,3 +607,116 @@ Answer:""")
         "intent": intent,
         "related_concepts": get_related_nodes(resolved_question, user_id=user_id).get("nodes", [])
     }
+
+
+def stream_rag(question: str, history: list = [], mode: str = "default",
+               user_id: str = None, document_ids: list = None):
+    """
+    Generator that yields SSE events for streaming responses.
+
+    Phase 1: Non-streaming setup (retrieval, classification).
+    Phase 2: Stream LLM tokens.
+    Phase 3: Yield final metadata event (sources, intent, confidence).
+
+    SSE format:
+        data: {"type": "meta",  "sources": [...], "intent": "...", "confidence": 0.8, "chunks": [...]}
+        data: {"type": "token", "text": "hello "}
+        data: {"type": "done",  "related_concepts": [...]}
+    """
+    import json
+
+    supabase = get_supabase()
+    check = supabase.table("chunks").select("id")        .eq("user_id", user_id).limit(1).execute() if user_id else         supabase.table("chunks").select("id").limit(1).execute()
+
+    if not check.data:
+        yield f'data: {json.dumps({"type": "meta", "sources": [], "intent": "answer", "confidence": 0.0, "chunks": []})}\n\n'
+        yield f'data: {json.dumps({"type": "token", "text": "No documents uploaded yet. Please upload a document first."})}\n\n'
+        yield f'data: {json.dumps({"type": "done", "related_concepts": []})}\n\n'
+        return
+
+    llm = get_llm()
+    formatted_history = format_history(history)
+
+    if history:
+        combined = resolve_and_classify(question, history)
+        resolved_question = combined["resolved"]
+        intent = combined["intent"]
+    else:
+        resolved_question = question
+        intent = classify_intent(question)
+
+    REFERENCE_WORDS = ["above", "that", "it", "previous", "you mentioned",
+                       "first point", "second point", "elaborate", "expand",
+                       "more detail", "explain more", "go deeper", "what about"]
+    needs_router = any(w in resolved_question.lower() for w in REFERENCE_WORDS)
+    decision = "retrieve"
+
+    if history and intent == "answer" and needs_router:
+        router_chain = build_router_chain(history)
+        history_str = "\n".join([
+            f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+            for m in history[-6:]
+        ])
+        decision = router_chain.invoke({
+            "history": history_str, "question": resolved_question
+        }).strip().lower()
+
+    # For non-answer intents, run non-streaming and yield full answer
+    if intent in ("compare", "test", "summarize") or decision == "history":
+        if decision == "history":
+            history_str = "\n".join([f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}" for m in history[-6:]])
+            history_prompt = ChatPromptTemplate.from_template(
+                "Answer using only the conversation history below.\nConversation History:\n{history}\nQuestion: {question}\nAnswer:"
+            )
+            answer = (history_prompt | llm | StrOutputParser()).invoke({"history": history_str, "question": resolved_question})
+            yield f'data: {json.dumps({"type": "meta", "sources": ["conversation history"], "intent": intent, "confidence": 0.0, "chunks": []})}\n\n'
+        elif intent == "compare":
+            result = comparison_chain(resolved_question, mode, user_id=user_id, document_ids=document_ids)
+            answer = result["answer"]
+            yield f'data: {json.dumps({"type": "meta", "sources": result.get("sources", []), "intent": intent, "confidence": result.get("confidence", 0.0), "chunks": result.get("chunks", [])})}\n\n'
+        elif intent == "test":
+            result = test_generator_chain(resolved_question, user_id=user_id, document_ids=document_ids)
+            answer = result["answer"]
+            yield f'data: {json.dumps({"type": "meta", "sources": result.get("sources", []), "intent": intent, "confidence": result.get("confidence", 0.0), "chunks": result.get("chunks", [])})}\n\n'
+        else:
+            result = summarize_chain(resolved_question, mode, user_id=user_id, document_ids=document_ids)
+            answer = result["answer"]
+            yield f'data: {json.dumps({"type": "meta", "sources": result.get("sources", []), "intent": intent, "confidence": result.get("confidence", 0.0), "chunks": result.get("chunks", [])})}\n\n'
+
+        for token in answer:
+            yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
+        related = get_related_nodes(resolved_question, user_id=user_id).get("nodes", [])
+        yield f'data: {json.dumps({"type": "done", "related_concepts": related, "full_answer": answer})}\n\n'
+        return
+
+    # Answer intent — retrieve context then STREAM the LLM tokens
+    retrieved = retrieve_context(resolved_question, k=5, user_id=user_id, document_ids=document_ids)
+
+    yield f'data: {json.dumps({"type": "meta", "sources": retrieved.get("sources", []), "intent": intent, "confidence": retrieved.get("confidence", 0.0), "chunks": retrieved.get("chunks", [])})}\n\n'
+
+    GROUNDING_RULE = (
+        "STRICT RULE: Use ONLY the context below. Never use outside knowledge. "
+        "If the answer is not in context, respond EXACTLY: \"This isn\'t in your uploaded documents.\" "
+        "Cite the source file after each fact in brackets e.g. [notes.pdf]."
+    )
+    mode_prompts = {
+        "student": f"{GROUNDING_RULE}\nYou are helping a student. Use bullet points. Bold key terms.\nMaximum 150 words unless detail is specifically asked for.",
+        "lawyer": f"{GROUNDING_RULE}\nYou are a legal research assistant. Answer formally. Flag ambiguities.\nMaximum 150 words unless detail is specifically asked for.",
+        "developer": f"{GROUNDING_RULE}\nYou are a technical assistant. Include implementation details if present.\nMaximum 150 words unless detail is specifically asked for.",
+        "default": f"{GROUNDING_RULE}\nBe clear and concise. Maximum 150 words.",
+    }
+    system_msg = mode_prompts.get(mode, mode_prompts["default"])
+    prompt = ChatPromptTemplate.from_template(
+        system_msg + "\n\nContext: {context}\n\nQuestion: {question}\n\nAnswer:"
+    )
+
+    full_answer = ""
+    for token in (prompt | llm | StrOutputParser()).stream({
+        "context": retrieved["context"],
+        "question": resolved_question
+    }):
+        full_answer += token
+        yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
+
+    related = get_related_nodes(resolved_question, user_id=user_id).get("nodes", [])
+    yield f'data: {json.dumps({"type": "done", "related_concepts": related, "full_answer": full_answer})}\n\n'

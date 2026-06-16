@@ -113,3 +113,65 @@ export async function getSessionHistory(sessionId: string) {
   const res = await api.get(`/sessions/${sessionId}/history`)
   return res.data  // { history: [{role, content, timestamp}] }
 }
+export async function shareSession(sessionId: string) {
+  const res = await api.post(`/sessions/${sessionId}/share`)
+  return res.data  // { share_url, token }
+}
+
+export async function unshareSession(sessionId: string) {
+  const res = await api.delete(`/sessions/${sessionId}/share`)
+  return res.data
+}
+
+export async function getSharedSession(token: string) {
+  const res = await axios.get(`${BASE}/share/${token}`)
+  return res.data  // { name, created_at, messages }
+}
+
+// Streaming query via SSE
+export function streamQuery(
+  question: string, sessionId: string, mode: string,
+  documentIds: string[], token: string,
+  onMeta: (meta: any) => void,
+  onToken: (text: string) => void,
+  onDone: (data: any) => void,
+  onError: (err: string) => void
+): () => void {
+  const controller = new AbortController()
+
+  fetch(`${BASE}/query/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ question, session_id: sessionId, mode, document_ids: documentIds }),
+    signal: controller.signal,
+  }).then(async (res) => {
+    if (!res.ok) { onError(`HTTP ${res.status}`); return }
+    const reader = res.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const json = line.slice(6).trim()
+        if (!json) continue
+        try {
+          const evt = JSON.parse(json)
+          if (evt.type === 'meta')  onMeta(evt)
+          else if (evt.type === 'token') onToken(evt.text)
+          else if (evt.type === 'done')  onDone(evt)
+          else if (evt.type === 'error') onError(evt.message)
+        } catch {}
+      }
+    }
+  }).catch((err) => {
+    if (err.name !== 'AbortError') onError(String(err))
+  })
+
+  return () => controller.abort()
+}

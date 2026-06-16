@@ -129,3 +129,25 @@ Summary:"""
         for m in recent_history
     ])
     return f"Earlier conversation summary: {summary}\n\nRecent messages:\n{recent_text}"
+
+def generate_share_token(session_id: str, user_id: str) -> str:
+    """Generate a public share token for a session. Returns the token."""
+    import secrets
+    supabase = get_supabase()
+    token = secrets.token_urlsafe(24)
+    supabase.table("chat_sessions")        .update({"share_token": token, "is_public": True})        .eq("id", session_id)        .eq("user_id", user_id)        .execute()
+    return token
+
+def get_shared_session(token: str) -> dict | None:
+    """Fetch public session by share token. No user_id required."""
+    supabase = get_supabase()
+    res = supabase.table("chat_sessions")        .select("id, name, created_at")        .eq("share_token", token)        .eq("is_public", True)        .execute()
+    if not res.data:
+        return None
+    session = res.data[0]
+    messages = supabase.table("sessions")        .select("role, content, timestamp")        .eq("session_id", session["id"])        .order("timestamp")        .execute()
+    return {"name": session["name"], "created_at": session["created_at"], "messages": messages.data or []}
+
+def revoke_share_token(session_id: str, user_id: str):
+    supabase = get_supabase()
+    supabase.table("chat_sessions")        .update({"share_token": None, "is_public": False})        .eq("id", session_id)        .eq("user_id", user_id)        .execute()
