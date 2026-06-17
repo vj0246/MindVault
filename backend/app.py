@@ -282,28 +282,38 @@ def list_documents(user=Depends(get_current_user)):
 
 def _build_session_pdf(history: list, session_id: str) -> bytes:
     """Builds a human-readable PDF transcript of a chat session."""
-    from fpdf import FPDF
+    try:
+        from fpdf import FPDF
+        from fpdf.enums import XPos, YPos
+        _new_api = True
+    except ImportError:
+        from fpdf import FPDF
+        _new_api = False
 
     pdf = FPDF(format="A4")
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
 
     def safe(text: str) -> str:
-        # Core PDF fonts only support latin-1. Replace anything outside that
-        # range (emojis, special bullets like the hex symbol, smart quotes,
-        # etc.) instead of crashing the export.
-        return text.encode("latin-1", "replace").decode("latin-1")
+        return (text or "").encode("latin-1", "replace").decode("latin-1")
+
+    def cell(w, h, txt, bold=False):
+        """Wrapper that handles both old and new fpdf2 API."""
+        if _new_api:
+            pdf.cell(w, h, txt, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        else:
+            pdf.cell(w, h, txt, ln=True)
 
     # Title
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(40, 40, 40)
-    pdf.cell(0, 12, "MindVault Session Export", ln=True)
+    cell(0, 12, "MindVault Session Export")
 
     # Meta
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(120, 120, 120)
-    pdf.cell(0, 6, safe(f"Session: {session_id}"), ln=True)
-    pdf.cell(0, 6, f"Messages: {len(history)}", ln=True)
+    cell(0, 6, safe(f"Session: {session_id[:16]}"))
+    cell(0, 6, f"Messages: {len(history)}")
     pdf.ln(4)
     pdf.set_draw_color(220, 220, 220)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
@@ -312,28 +322,26 @@ def _build_session_pdf(history: list, session_id: str) -> bytes:
     for msg in history:
         is_user = msg["role"] == "user"
         label = "You" if is_user else "MindVault"
-        # .get(..., "") only applies when the KEY is missing -- if Supabase
-        # returns timestamp/content as None (null), this is None, and
-        # None.encode() inside safe() would crash the whole export.
         ts = msg.get("timestamp") or ""
         content_raw = msg.get("content") or ""
 
-        # Role label + timestamp
+        # Role label
         pdf.set_font("Helvetica", "B", 11)
-        if is_user:
-            pdf.set_text_color(40, 90, 200)
-        else:
+        pdf.set_text_color(40, 90, 200 if is_user else 70)
+        if not is_user:
             pdf.set_text_color(70, 140, 110)
-        pdf.cell(0, 7, label, ln=True)
+        cell(0, 7, label)
 
+        # Timestamp
         pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(150, 150, 150)
-        pdf.cell(0, 5, safe(ts), ln=True)
+        cell(0, 5, safe(ts[:19] if ts else ""))
 
-        # Message body
+        # Body
         pdf.set_font("Helvetica", "", 11)
         pdf.set_text_color(30, 30, 30)
-        body = safe(content_raw)
+        # Strip markdown symbols that look ugly in plain PDF
+        body = safe(content_raw.replace("**", "").replace("__", "").replace("# ", "").replace("## ", ""))
         pdf.multi_cell(0, 6, body)
         pdf.ln(4)
 
@@ -410,9 +418,19 @@ def delete_session_route(session_id: str, user=Depends(get_current_user)):
 
 @app.post("/sessions/{session_id}/share")
 def share_session(session_id: str, user=Depends(get_current_user)):
-    token = generate_share_token(session_id, str(user.id))
-    base_url = os.environ.get("FRONTEND_URL", "https://mind-vault-psi.vercel.app")
-    return {"share_url": f"{base_url}/share/{token}", "token": token}
+    try:
+        token = generate_share_token(session_id, str(user.id))
+        base_url = os.environ.get("FRONTEND_URL", "").rstrip("/")
+        if not base_url:
+            # Fallback: derive from request or use default
+            base_url = "https://mind-vault-psi.vercel.app"
+        share_url = f"{base_url}/share/{token}"
+        print(f"[Share] Generated share URL: {share_url}")
+        return {"share_url": share_url, "token": token}
+    except Exception as e:
+        import traceback
+        print(f"[Share] ERROR: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Share failed: {str(e)}")
 
 @app.delete("/sessions/{session_id}/share")
 def unshare_session(session_id: str, user=Depends(get_current_user)):
