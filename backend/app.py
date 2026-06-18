@@ -10,7 +10,8 @@ from rag.ingest import ingest_document, load_document, load_image_via_groq, IMAG
 from rag.retrieve1 import query_rag, query_with_attachment, stream_rag
 from rag.memory import (
     get_session_history, save_session_message, clear_session_messages,
-    list_chat_sessions, create_chat_session, rename_chat_session, delete_chat_session
+    list_chat_sessions, create_chat_session, rename_chat_session, delete_chat_session,
+    generate_share_token, get_shared_session, revoke_share_token
 )
 from metadata.tracker import log_document, get_all_documents
 from graph.extractor import extract_entities_and_relations
@@ -356,7 +357,12 @@ def export_session(req: ExportRequest, user=Depends(get_current_user)):
         if req.format == "pdf":
             if not history:
                 history = [{"role": "assistant", "content": "No messages in this session.", "timestamp": ""}]
-            pdf_bytes = _build_session_pdf(history, req.session_id)
+            try:
+                pdf_bytes = _build_session_pdf(history, req.session_id)
+            except Exception as pdf_err:
+                import traceback
+                print(f"[PDF Export] ERROR: {traceback.format_exc()}")
+                raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(pdf_err)}")
             return Response(
                 content=pdf_bytes,
                 media_type="application/pdf",
