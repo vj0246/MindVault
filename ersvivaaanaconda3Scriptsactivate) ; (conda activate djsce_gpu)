@@ -1,0 +1,8 @@
+[33mcommit b14c99e4be1180d8b71910781315171ba99c466c[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: Vivaan Jain <vivaan.jain246@gmail.com>
+Date:   Thu Jun 18 14:37:22 2026 +0530
+
+    fixed pdf export plus chunking + pdf uploading in chatbox
+
+ backend/app.py | 10 [32m++++++++[m[31m--[m
+ 1 file changed, 8 insertions(+), 2 deletions(-)
