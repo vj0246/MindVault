@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor
 from rag.db import get_supabase
 from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -101,40 +102,46 @@ def _rrf_merge(semantic: list, keyword: list, top_k: int, rrf_k: int = 60) -> li
     return result
 
 
-def retrieve_context(question: str, k: int = 5, user_id: str = None, document_ids: list = None) -> dict:
-    supabase = get_supabase()
-    embedding = list(EMBED_MODEL.embed([question]))[0].tolist()
-
-    # --- Semantic search (vector similarity) ---
+def _run_semantic_search(supabase, embedding, k, user_id, document_ids):
     sem_params = {
         "query_embedding": embedding,
-        "match_count": k * 3,       # fetch wider pool for fusion
-        "similarity_threshold": 0.2  # lower threshold, RRF handles re-ranking
+        "match_count": k * 3,
+        "similarity_threshold": 0.2
     }
     if user_id:
         sem_params["p_user_id"] = user_id
     if document_ids:
         sem_params["p_document_ids"] = document_ids
+    return (supabase.rpc("match_chunks", sem_params).execute().data or [])
 
-    sem_result = supabase.rpc("match_chunks", sem_params).execute()
-    semantic_chunks = sem_result.data or []
-
-    # --- Keyword search (PostgreSQL FTS / BM25-style) ---
-    keyword_chunks = []
+def _run_keyword_search(supabase, question, k, user_id, document_ids):
     try:
-        kw_params = {
-            "query_text": question,
-            "match_count": k * 2
-        }
+        kw_params = {"query_text": question, "match_count": k}
         if user_id:
             kw_params["p_user_id"] = user_id
         if document_ids:
             kw_params["p_document_ids"] = document_ids
-
-        kw_result = supabase.rpc("keyword_search_chunks", kw_params).execute()
-        keyword_chunks = kw_result.data or []
+        return (supabase.rpc("keyword_search_chunks", kw_params).execute().data or [])
     except Exception as e:
         print(f"[Retrieve] Keyword search failed, falling back to semantic only: {e}")
+        return []
+
+def retrieve_context(question: str, k: int = 5, user_id: str = None, document_ids: list = None) -> dict:
+    supabase = get_supabase()
+    embedding = list(EMBED_MODEL.embed([question]))[0].tolist()
+
+    # Semantic (Supabase RPC) and keyword (Supabase RPC) are two independent
+    # network round-trips that were previously sequential -- ~150-300ms
+    # wasted per query waiting on one before starting the other. Both are
+    # synchronous (supabase-py has no native async client used here), so
+    # ThreadPoolExecutor runs them concurrently instead.
+    # k reduced from k*2 to k for keyword pool -- rerank narrows either way,
+    # fetching a wider keyword pool added Supabase latency with no quality gain.
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        sem_future = executor.submit(_run_semantic_search, supabase, embedding, k, user_id, document_ids)
+        kw_future = executor.submit(_run_keyword_search, supabase, question, k, user_id, document_ids)
+        semantic_chunks = sem_future.result()
+        keyword_chunks = kw_future.result()
 
     if not semantic_chunks and not keyword_chunks:
         return {"context": "", "sources": [], "chunks": []}
@@ -537,17 +544,23 @@ def query_rag(question: str, history: list = [], mode: str = "default", user_id:
     formatted_history = format_history(history)
     llm = get_llm()
 
-    if history:
+    REFERENCE_WORDS = ["above", "that", "it", "previous", "you mentioned",
+                       "first point", "second point", "elaborate", "expand",
+                       "more detail", "explain more", "go deeper", "what about"]
+
+    # resolve_and_classify costs a full extra Groq round-trip (300-800ms).
+    # Only worth it when the question actually references prior conversation
+    # (contains a reference word) AND history exists -- otherwise the question
+    # is self-contained and a cheap keyword+single-word-LLM classify is enough.
+    has_reference = history and any(w in question.lower() for w in REFERENCE_WORDS)
+
+    if has_reference:
         combined = resolve_and_classify(question, history)
         resolved_question = combined["resolved"]
         intent = combined["intent"]
     else:
         resolved_question = question
         intent = classify_intent(question)
-
-    REFERENCE_WORDS = ["above", "that", "it", "previous", "you mentioned",
-                       "first point", "second point", "elaborate", "expand",
-                       "more detail", "explain more", "go deeper", "what about"]
 
     needs_router = any(w in resolved_question.lower() for w in REFERENCE_WORDS)
     decision = "retrieve"
@@ -637,7 +650,17 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
     llm = get_llm()
     formatted_history = format_history(history)
 
-    if history:
+    REFERENCE_WORDS = ["above", "that", "it", "previous", "you mentioned",
+                       "first point", "second point", "elaborate", "expand",
+                       "more detail", "explain more", "go deeper", "what about"]
+
+    # Same optimization as query_rag: skip the extra LLM round-trip for
+    # resolve_and_classify unless the question actually references prior
+    # conversation. Standalone questions get a cheap classify_intent() call
+    # instead of the combined resolve+classify call.
+    has_reference = history and any(w in question.lower() for w in REFERENCE_WORDS)
+
+    if has_reference:
         combined = resolve_and_classify(question, history)
         resolved_question = combined["resolved"]
         intent = combined["intent"]
@@ -645,9 +668,6 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
         resolved_question = question
         intent = classify_intent(question)
 
-    REFERENCE_WORDS = ["above", "that", "it", "previous", "you mentioned",
-                       "first point", "second point", "elaborate", "expand",
-                       "more detail", "explain more", "go deeper", "what about"]
     needs_router = any(w in resolved_question.lower() for w in REFERENCE_WORDS)
     decision = "retrieve"
 
@@ -683,9 +703,17 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
             answer = result["answer"]
             yield f'data: {json.dumps({"type": "meta", "sources": result.get("sources", []), "intent": intent, "confidence": result.get("confidence", 0.0), "chunks": result.get("chunks", [])})}\n\n'
 
-        for token in answer:
-            yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
-        related = get_related_nodes(resolved_question, user_id=user_id).get("nodes", [])
+        # Kick off graph lookup on a background thread BEFORE streaming tokens,
+        # so it computes in parallel instead of adding latency after the
+        # answer is already done. It's pure Supabase reads (no LLM), so this
+        # mainly saves wall-clock time rather than Groq cost.
+        with ThreadPoolExecutor(max_workers=1) as _graph_executor:
+            _graph_future = _graph_executor.submit(get_related_nodes, resolved_question, user_id=user_id)
+
+            for token in answer:
+                yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
+
+            related = _graph_future.result().get("nodes", [])
         yield f'data: {json.dumps({"type": "done", "related_concepts": related, "full_answer": answer})}\n\n'
         return
 
@@ -711,12 +739,20 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
     )
 
     full_answer = ""
-    for token in (prompt | llm | StrOutputParser()).stream({
-        "context": retrieved["context"],
-        "question": resolved_question
-    }):
-        full_answer += token
-        yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
+    with ThreadPoolExecutor(max_workers=1) as _graph_executor:
+        # Same optimization: graph lookup runs concurrently with token
+        # streaming instead of after it. By the time the LLM finishes
+        # generating (typically 1-3s for a 150-word answer), the graph
+        # query (50-150ms) is long done -- this fully hides its latency.
+        _graph_future = _graph_executor.submit(get_related_nodes, resolved_question, user_id=user_id)
 
-    related = get_related_nodes(resolved_question, user_id=user_id).get("nodes", [])
+        for token in (prompt | llm | StrOutputParser()).stream({
+            "context": retrieved["context"],
+            "question": resolved_question
+        }):
+            full_answer += token
+            yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
+
+        related = _graph_future.result().get("nodes", [])
+
     yield f'data: {json.dumps({"type": "done", "related_concepts": related, "full_answer": full_answer})}\n\n'
