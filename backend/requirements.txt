@@ -14,3 +14,4 @@ groq
 fastembed
 docx2txt
 flashrank
+langsmith
