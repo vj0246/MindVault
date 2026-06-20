@@ -72,6 +72,14 @@ export async function exportSessionPDF(sessionId: string): Promise<Blob> {
   const res = await api.post('/export', { session_id: sessionId, format: 'pdf' }, {
     responseType: 'blob'
   })
+  // With responseType:'blob', axios delivers a 500's JSON error body as an
+  // unreadable Blob instead of throwing -- silently masking the real error.
+  // Detect that case and surface the actual backend message.
+  if (res.data.type && res.data.type.includes('json')) {
+    const text = await res.data.text()
+    const parsed = JSON.parse(text)
+    throw new Error(parsed.detail || 'PDF export failed')
+  }
   return res.data
 }
 

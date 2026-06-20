@@ -258,13 +258,14 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, userEmail, onSignOut }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onExportPDF: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
   selectedDocs: string[]; onToggleDoc: (id: string) => void
   sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
   onShare: (id: string) => void; sharingId: string | null
+  userEmail: string; onSignOut: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -419,6 +420,38 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             <button className="action-btn danger" onClick={onClearSession}>✕ Clear History</button>
           </div>
         </div>
+
+        {/* Account — fixed footer, outside the scrollable area */}
+        <div className="divider" />
+        <div className="flex items-center justify-between gap-2 p-4">
+          <div className="flex items-center gap-2 min-w-0">
+            <div style={{
+              width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+              background: 'var(--surface2)', border: '1px solid var(--border2)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--accent3)'
+            }}>
+              {userEmail ? userEmail[0].toUpperCase() : '?'}
+            </div>
+            <p style={{
+              fontSize: 11, color: 'var(--text2)', fontFamily: 'IBM Plex Mono',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+            }} title={userEmail}>
+              {userEmail || 'Signed in'}
+            </p>
+          </div>
+          <button onClick={onSignOut} title="Sign out"
+            style={{
+              fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--text3)',
+              background: 'none', border: 'none', cursor: 'pointer', padding: '4px 2px',
+              flexShrink: 0, letterSpacing: '0.03em'
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text3)'}
+          >
+            Sign out
+          </button>
+        </div>
       </aside>
     </>
   )
@@ -480,6 +513,7 @@ export default function Home() {
   const [selectedDocs, setSelectedDocs] = useState<string[]>([])
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [userId, setUserId] = useState<string>('')
+  const [userEmail, setUserEmail] = useState<string>('')
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [sharingId, setSharingId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -491,6 +525,7 @@ export default function Home() {
     if (!session) { window.location.href = '/login'; return }
     const uid = session.user.id
     setUserId(uid)
+    setUserEmail(session.user.email || '')
     // Restore last active session from localStorage, or create fresh one
     const stored = localStorage.getItem(`mv_session_${uid}`)
     if (stored) {
@@ -693,7 +728,10 @@ export default function Home() {
       a.href = url; a.download = `mindvault-${sessionId.slice(0, 8)}.pdf`; a.click()
       URL.revokeObjectURL(url)
       showToast('PDF exported', 'success')
-    } catch { showToast('PDF export failed', 'error') }
+    } catch (err: any) {
+      console.error('PDF export error:', err)
+      showToast(err?.message || 'PDF export failed', 'error')
+    }
   }
 
   const handleNewSession = async () => {
@@ -763,6 +801,10 @@ export default function Home() {
     setMessages([]); showToast('History cleared', 'info')
   }
 
+  const handleSignOut = async () => {
+    await signOut()
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
@@ -777,6 +819,7 @@ export default function Home() {
         selectedDocs={selectedDocs} onToggleDoc={handleToggleDoc}
         sessions={sessions} onSelectSession={handleSelectSession} onDeleteSession={handleDeleteSession}
         onShare={handleShare} sharingId={sharingId}
+        userEmail={userEmail} onSignOut={handleSignOut}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--bg)' }}>
