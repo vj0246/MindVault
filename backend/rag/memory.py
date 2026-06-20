@@ -46,7 +46,9 @@ def clear_session_messages(session_id: str, user_id: str):
 # ─────────────────────────────────────────────────────────────
 
 def list_chat_sessions(user_id: str) -> list:
-    """Return all named sessions for user, newest first."""
+    """Return all named sessions for user, newest-active first. Each session
+    also carries a 'number' field -- a stable per-user sequence (1, 2, 3...)
+    based on creation order, NOT the underlying UUID -- for clean display."""
     supabase = get_supabase()
     result = (
         supabase.table("chat_sessions")
@@ -55,7 +57,16 @@ def list_chat_sessions(user_id: str) -> list:
         .order("last_active", desc=True)
         .execute()
     )
-    return result.data or []
+    sessions = result.data or []
+
+    # Assign numbers by creation order (oldest = #1) regardless of the
+    # last_active sort used for display order above.
+    by_created = sorted(sessions, key=lambda s: s["created_at"])
+    number_map = {s["id"]: i + 1 for i, s in enumerate(by_created)}
+    for s in sessions:
+        s["number"] = number_map[s["id"]]
+
+    return sessions
 
 def create_chat_session(session_id: str, user_id: str, name: str = "New Chat") -> dict:
     """Create a new named session. Returns the created row."""

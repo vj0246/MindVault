@@ -1,7 +1,7 @@
 'use client'
 export const dynamic = 'force-dynamic'
 import { getSupabase, signOut } from '../lib/supabase'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import GraphPanel from '../components/GraphPanel'
 import {
@@ -51,6 +51,7 @@ interface ChatSession {
   name: string
   created_at: string
   last_active: string
+  number?: number
 }
 
 interface ChunkSource {
@@ -197,7 +198,13 @@ function SourcePanel({ chunks }: { chunks: ChunkSource[] }) {
   )
 }
 
-function MessageBubble({ msg, onConceptClick }: {
+// Memoized — without this, every keystroke in the input box re-renders
+// the ENTIRE message list (since input/messages live in the same parent
+// component). With many messages, that re-render cost compounds into
+// visible lag while typing. memo() makes each bubble only re-render when
+// its own `msg` prop actually changes (e.g. new streaming tokens for that
+// specific message), not on every parent re-render.
+const MessageBubble = React.memo(function MessageBubble({ msg, onConceptClick }: {
   msg: Message
   onConceptClick: (c: string) => void
 }) {
@@ -274,7 +281,7 @@ function MessageBubble({ msg, onConceptClick }: {
       </div>
     </div>
   )
-}
+})
 
 function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, userEmail, onSignOut }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
@@ -363,35 +370,43 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
                   borderRadius: 4, padding: '2px 8px', cursor: 'pointer'
                 }}>+ New</button>
               </div>
-              {sessions.map(s => (
-                <div key={s.id} onClick={() => onSelectSession(s.id)} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '6px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 2,
-                  background: s.id === sessionId ? 'rgba(126,184,164,0.1)' : 'transparent',
-                  border: s.id === sessionId ? '1px solid rgba(126,184,164,0.2)' : '1px solid transparent',
-                }}>
-                  <span style={{
-                    fontSize: 11, color: s.id === sessionId ? 'var(--accent)' : 'var(--text2)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
-                    fontFamily: 'IBM Plex Mono'
+              {/* Bounded + independently scrollable -- without this, a long
+                  chat history pushes Knowledge Base far below the fold,
+                  since both used to share one continuous scroll region. */}
+              <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                {sessions.map(s => (
+                  <div key={s.id} onClick={() => onSelectSession(s.id)} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '6px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 2,
+                    background: s.id === sessionId ? 'rgba(126,184,164,0.1)' : 'transparent',
+                    border: s.id === sessionId ? '1px solid rgba(126,184,164,0.2)' : '1px solid transparent',
                   }}>
-                    {s.name.slice(0, 28)}{s.name.length > 28 ? '…' : ''}
-                  </span>
-                  <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                    <button onClick={e => { e.stopPropagation(); onShare(s.id) }}
-                      disabled={sharingId === s.id}
-                      title="Copy share link"
-                      style={{ fontSize: 10, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px' }}>
-                      {sharingId === s.id ? '…' : '🔗'}
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }}
-                      style={{ fontSize: 10, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px' }}>✕</button>
+                    <span style={{
+                      display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0,
+                      fontSize: 11, color: s.id === sessionId ? 'var(--accent)' : 'var(--text2)',
+                      fontFamily: 'IBM Plex Mono'
+                    }}>
+                      <span style={{ flexShrink: 0, opacity: 0.5, fontSize: 10 }}>#{s.number ?? '–'}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {s.name.slice(0, 24)}{s.name.length > 24 ? '…' : ''}
+                      </span>
+                    </span>
+                    <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                      <button onClick={e => { e.stopPropagation(); onShare(s.id) }}
+                        disabled={sharingId === s.id}
+                        title="Copy share link"
+                        style={{ fontSize: 10, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px' }}>
+                        {sharingId === s.id ? '…' : '🔗'}
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }}
+                        style={{ fontSize: 10, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px' }}>✕</button>
+                    </div>
                   </div>
-                </div>
-              ))}
-              {sessions.length === 0 && (
-                <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>No chats yet</p>
-              )}
+                ))}
+                {sessions.length === 0 && (
+                  <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>No chats yet</p>
+                )}
+              </div>
             </div>
 
           <div className="flex-1">
@@ -588,7 +603,13 @@ export default function Home() {
     } catch { /* silent */ }
   }
 
-  const handleViewGraph = async (topic: string) => {
+  // useCallback with [] deps -- every call inside (setState setters,
+  // getGraphTopic, showToast) is stable/state-independent, so an empty
+  // dependency array is safe. This keeps the function reference stable
+  // across renders, which is REQUIRED for MessageBubble's React.memo above
+  // to actually skip re-renders -- a memoized component still re-renders
+  // if any of its function props get a new reference every render.
+  const handleViewGraph = useCallback(async (topic: string) => {
     setGraphOpen(true)
     setGraphTopic(topic)
     setGraphLoading(true)
@@ -601,7 +622,7 @@ export default function Home() {
     } finally {
       setGraphLoading(false)
     }
-  }
+  }, [])
 
   const handleViewFullGraph = async () => {
     setGraphOpen(true)

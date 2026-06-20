@@ -295,8 +295,10 @@ async def query_with_attachment_route(
 def list_documents(user=Depends(get_current_user)):
     return {"documents": get_all_documents(user_id=str(user.id))}
 
-def _build_session_pdf(history: list, session_id: str) -> bytes:
-    """Builds a human-readable PDF transcript of a chat session."""
+def _build_session_pdf(history: list, session_label: str) -> bytes:
+    """Builds a human-readable PDF transcript of a chat session.
+    session_label is a clean display string like 'Session #4' -- never the
+    raw UUID, which means nothing to the user."""
     try:
         from fpdf import FPDF
         from fpdf.enums import XPos, YPos
@@ -327,7 +329,7 @@ def _build_session_pdf(history: list, session_id: str) -> bytes:
     # Meta
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(120, 120, 120)
-    cell(0, 6, safe(f"Session: {session_id[:16]}"))
+    cell(0, 6, safe(session_label))
     cell(0, 6, f"Messages: {len(history)}")
     pdf.ln(4)
     pdf.set_draw_color(220, 220, 220)
@@ -368,26 +370,35 @@ def export_session(req: ExportRequest, user=Depends(get_current_user)):
     try:
         history = get_session_history(req.session_id, user_id=str(user.id))
 
+        # Look up the session's clean sequential number + name for display.
+        # Falls back to a generic label if the session row can't be found
+        # (e.g. it was deleted) -- exports should never show a raw UUID.
+        all_sessions = list_chat_sessions(str(user.id))
+        matching = next((s for s in all_sessions if s["id"] == req.session_id), None)
+        session_label = f"Session #{matching['number']}" if matching else "Session"
+        session_name = matching["name"] if matching else "Untitled"
+
         if req.format == "pdf":
             if not history:
                 history = [{"role": "assistant", "content": "No messages in this session.", "timestamp": ""}]
             try:
-                pdf_bytes = _build_session_pdf(history, req.session_id)
+                pdf_bytes = _build_session_pdf(history, session_label)
             except Exception as pdf_err:
                 import traceback
                 print(f"[PDF Export] ERROR: {traceback.format_exc()}")
                 raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(pdf_err)}")
+            fname_num = matching["number"] if matching else "x"
             return Response(
                 content=pdf_bytes,
                 media_type="application/pdf",
-                headers={"Content-Disposition": f'attachment; filename="mindvault-{req.session_id[:8]}.pdf"'}
+                headers={"Content-Disposition": f'attachment; filename="mindvault-session-{fname_num}.pdf"'}
             )
 
         if not history:
             return {"report": "# MindVault Session Export\n\n_No messages in this session._"}
 
         lines = ["# MindVault Session Export\n"]
-        lines.append(f"**Session ID:** `{req.session_id}`\n")
+        lines.append(f"**{session_label}** \u2014 {session_name}\n")
         lines.append(f"**Messages:** {len(history)}\n")
         lines.append("---\n")
 
