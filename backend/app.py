@@ -236,7 +236,21 @@ async def query_with_attachment_route(
                 docs = load_image_via_groq(tmp_path)
             else:
                 docs = load_document(tmp_path)
-            attachment_text = "\n\n".join(d.page_content for d in docs)
+            # query_with_attachment only uses the first ~4000 chars anyway, so
+            # stop accumulating once we have enough instead of joining every
+            # page of a large document first. A "Complete Course" OCR PDF can
+            # be hundreds of pages -- extracting and joining all of it just to
+            # truncate afterward wastes CPU/memory on Render's 512MB tier and
+            # risks the request timing out or the process being OOM-killed.
+            ATTACHMENT_CHAR_BUDGET = 6000
+            parts = []
+            total_len = 0
+            for d in docs:
+                parts.append(d.page_content)
+                total_len += len(d.page_content)
+                if total_len >= ATTACHMENT_CHAR_BUDGET:
+                    break
+            attachment_text = "\n\n".join(parts)
         finally:
             os.unlink(tmp_path)
 

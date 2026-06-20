@@ -202,11 +202,29 @@ function MessageBubble({ msg, onConceptClick }: {
   onConceptClick: (c: string) => void
 }) {
   if (msg.role === 'user') {
+    // handleSend prefixes attachment messages as "📎 filename\nquestion".
+    // Split that out so the filename renders as a distinct chip instead of
+    // running into the question as plain text on its own line.
+    const attachMatch = msg.content.match(/^📎 (.+?)\n([\s\S]*)$/)
+    const attachName = attachMatch ? attachMatch[1] : null
+    const bodyText = attachMatch ? attachMatch[2] : msg.content
+
     return (
       <div className="flex justify-end fade-up" style={{ width: '100%' }}>
         <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+          {attachName && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--accent3)',
+              background: 'rgba(126,184,164,0.08)', border: '1px solid rgba(126,184,164,0.2)',
+              borderRadius: 5, padding: '3px 9px', marginBottom: 6, maxWidth: '100%'
+            }}>
+              <span style={{ flexShrink: 0 }}>📎</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachName}</span>
+            </span>
+          )}
           <div className="msg-user" style={{ textAlign: 'left', display: 'inline-block', maxWidth: '100%' }}>
-            <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{msg.content}</p>
+            <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{bodyText}</p>
           </div>
           <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'right', marginTop: 4 }}>
             {timeStr(msg.timestamp)}
@@ -657,9 +675,10 @@ export default function Home() {
           intent: result.intent,
           related_concepts: result.related_concepts || [],
         } : m))
-      } catch {
-        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: 'Could not reach MindVault. Please try again.' } : m))
-        showToast('Backend unreachable', 'error')
+      } catch (err: any) {
+        const msg = err?.response?.data?.detail || err?.message || 'Could not reach MindVault. Please try again.'
+        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: msg } : m))
+        showToast(msg.length > 60 ? 'Request failed' : msg, 'error')
       } finally { setLoading(false) }
       return
     }
