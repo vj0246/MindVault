@@ -178,7 +178,3 @@ Right now, entity/relationship extraction runs per-document, in the background, 
 This is a meaningfully larger system than what exists today, but the foundation — entity extraction, relationship storage, BFS traversal, the visualization component — is already built and already running in production. The next phase is making the graph a destination, not a footnote.
 
 ---
-
-## A note on how this was built
-
-I worked with Claude (Anthropic) throughout this build as a pairing partner for implementation — writing and debugging code, reasoning through production incidents, and structuring architectural decisions. Every line shipped to production was reviewed, tested against real failures, and iterated on by me. The judgment calls — what to build, which trade-offs to accept, what "good enough" looks like for a free-tier-hosted multi-user system — were mine, made by working through dozens of real, live bugs rather than a single clean build. I'm saying this plainly because I think it's a more honest and more impressive story than pretending otherwise: knowing how to direct, debug, and ship with AI assistance is itself the skill, and it's the same skill I'd bring to a team.
