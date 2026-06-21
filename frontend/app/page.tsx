@@ -1,7 +1,7 @@
 'use client'
 export const dynamic = 'force-dynamic'
 import { getSupabase, signOut } from '../lib/supabase'
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import GraphPanel from '../components/GraphPanel'
 import {
@@ -51,7 +51,6 @@ interface ChatSession {
   name: string
   created_at: string
   last_active: string
-  number?: number
 }
 
 interface ChunkSource {
@@ -104,7 +103,7 @@ function TypingIndicator() {
   return (
     <div className="flex items-start gap-3 fade-up px-1">
       <div className="w-5 h-5 rounded-full flex-shrink-0 mt-1 flex items-center justify-center"
-        style={{ background: 'rgba(232,197,71,0.12)', border: '1px solid rgba(232,197,71,0.2)' }}>
+        style={{ background: 'rgba(184,144,46,0.12)', border: '1px solid rgba(184,144,46,0.2)' }}>
         <span style={{ fontSize: 8, color: 'var(--accent)' }}>M</span>
       </div>
       <div className="flex items-center gap-1.5 py-3">
@@ -178,7 +177,7 @@ function SourcePanel({ chunks }: { chunks: ChunkSource[] }) {
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--accent3)', background: 'rgba(126,184,164,0.1)', border: '1px solid rgba(126,184,164,0.2)', borderRadius: 3, padding: '1px 6px' }}>
+                  <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--accent3)', background: 'rgba(74,140,118,0.1)', border: '1px solid rgba(74,140,118,0.2)', borderRadius: 3, padding: '1px 6px' }}>
                     {Math.round(c.similarity * 100)}% match
                   </span>
                   <button onClick={() => copyChunk(c.content, i)} title="Copy chunk text — paste in PDF viewer to find passage"
@@ -198,40 +197,16 @@ function SourcePanel({ chunks }: { chunks: ChunkSource[] }) {
   )
 }
 
-// Memoized — without this, every keystroke in the input box re-renders
-// the ENTIRE message list (since input/messages live in the same parent
-// component). With many messages, that re-render cost compounds into
-// visible lag while typing. memo() makes each bubble only re-render when
-// its own `msg` prop actually changes (e.g. new streaming tokens for that
-// specific message), not on every parent re-render.
-const MessageBubble = React.memo(function MessageBubble({ msg, onConceptClick }: {
+function MessageBubble({ msg, onConceptClick }: {
   msg: Message
   onConceptClick: (c: string) => void
 }) {
   if (msg.role === 'user') {
-    // handleSend prefixes attachment messages as "📎 filename\nquestion".
-    // Split that out so the filename renders as a distinct chip instead of
-    // running into the question as plain text on its own line.
-    const attachMatch = msg.content.match(/^📎 (.+?)\n([\s\S]*)$/)
-    const attachName = attachMatch ? attachMatch[1] : null
-    const bodyText = attachMatch ? attachMatch[2] : msg.content
-
     return (
       <div className="flex justify-end fade-up" style={{ width: '100%' }}>
         <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-          {attachName && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--accent3)',
-              background: 'rgba(126,184,164,0.08)', border: '1px solid rgba(126,184,164,0.2)',
-              borderRadius: 5, padding: '3px 9px', marginBottom: 6, maxWidth: '100%'
-            }}>
-              <span style={{ flexShrink: 0 }}>📎</span>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachName}</span>
-            </span>
-          )}
           <div className="msg-user" style={{ textAlign: 'left', display: 'inline-block', maxWidth: '100%' }}>
-            <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{bodyText}</p>
+            <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{msg.content}</p>
           </div>
           <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'right', marginTop: 4 }}>
             {timeStr(msg.timestamp)}
@@ -244,7 +219,7 @@ const MessageBubble = React.memo(function MessageBubble({ msg, onConceptClick }:
   return (
     <div className="flex items-start gap-3 fade-up">
       <div className="w-5 h-5 rounded-full flex-shrink-0 mt-1 flex items-center justify-center"
-        style={{ background: 'rgba(232,197,71,0.12)', border: '1px solid rgba(232,197,71,0.2)' }}>
+        style={{ background: 'rgba(184,144,46,0.12)', border: '1px solid rgba(184,144,46,0.2)' }}>
         <span style={{ fontSize: 8, color: 'var(--accent)', fontFamily: 'Instrument Serif', fontStyle: 'italic' }}>M</span>
       </div>
       <div className="flex-1 min-w-0">
@@ -281,16 +256,15 @@ const MessageBubble = React.memo(function MessageBubble({ msg, onConceptClick }:
       </div>
     </div>
   )
-})
+}
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, userEmail, onSignOut }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onExportPDF: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
   selectedDocs: string[]; onToggleDoc: (id: string) => void
   sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
   onShare: (id: string) => void; sharingId: string | null
-  userEmail: string; onSignOut: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -366,47 +340,41 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
                 </p>
                 <button onClick={onNewSession} style={{
                   fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--accent)',
-                  background: 'rgba(126,184,164,0.08)', border: '1px solid rgba(126,184,164,0.2)',
+                  background: 'rgba(74,140,118,0.08)', border: '1px solid rgba(74,140,118,0.2)',
                   borderRadius: 4, padding: '2px 8px', cursor: 'pointer'
                 }}>+ New</button>
               </div>
-              {/* Bounded + independently scrollable -- without this, a long
-                  chat history pushes Knowledge Base far below the fold,
-                  since both used to share one continuous scroll region. */}
-              <div style={{ maxHeight: 220, overflowY: 'auto' }}>
-                {sessions.map(s => (
-                  <div key={s.id} onClick={() => onSelectSession(s.id)} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '6px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 2,
-                    background: s.id === sessionId ? 'rgba(126,184,164,0.1)' : 'transparent',
-                    border: s.id === sessionId ? '1px solid rgba(126,184,164,0.2)' : '1px solid transparent',
+              {sessions.map(s => (
+                <div key={s.id} onClick={() => onSelectSession(s.id)} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '6px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 2,
+                  background: s.id === sessionId ? 'rgba(74,140,118,0.1)' : 'transparent',
+                  border: s.id === sessionId ? '1px solid rgba(74,140,118,0.2)' : '1px solid transparent',
+                }}>
+                  <span style={{
+                    fontSize: 11, color: s.id === sessionId ? 'var(--accent)' : 'var(--text2)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+                    fontFamily: 'IBM Plex Mono'
                   }}>
-                    <span style={{
-                      display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0,
-                      fontSize: 11, color: s.id === sessionId ? 'var(--accent)' : 'var(--text2)',
-                      fontFamily: 'IBM Plex Mono'
-                    }}>
-                      <span style={{ flexShrink: 0, opacity: 0.5, fontSize: 10 }}>#{s.number ?? '–'}</span>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {s.name.slice(0, 24)}{s.name.length > 24 ? '…' : ''}
-                      </span>
-                    </span>
-                    <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                      <button onClick={e => { e.stopPropagation(); onShare(s.id) }}
-                        disabled={sharingId === s.id}
-                        title="Copy share link"
-                        style={{ fontSize: 10, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px' }}>
-                        {sharingId === s.id ? '…' : '🔗'}
-                      </button>
-                      <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }}
-                        style={{ fontSize: 10, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 3px' }}>✕</button>
-                    </div>
+                    {s.name.slice(0, 28)}{s.name.length > 28 ? '…' : ''}
+                  </span>
+                  <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                    <button onClick={e => { e.stopPropagation(); onShare(s.id) }}
+                      disabled={sharingId === s.id}
+                      title="Copy share link"
+                      className="tap-target"
+                      style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>
+                      {sharingId === s.id ? '…' : '🔗'}
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }}
+                      className="tap-target"
+                      style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>✕</button>
                   </div>
-                ))}
-                {sessions.length === 0 && (
-                  <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>No chats yet</p>
-                )}
-              </div>
+                </div>
+              ))}
+              {sessions.length === 0 && (
+                <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>No chats yet</p>
+              )}
             </div>
 
           <div className="flex-1">
@@ -452,38 +420,6 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             <button className="action-btn" onClick={onNewSession}>+ New Session</button>
             <button className="action-btn danger" onClick={onClearSession}>✕ Clear History</button>
           </div>
-        </div>
-
-        {/* Account — fixed footer, outside the scrollable area */}
-        <div className="divider" />
-        <div className="flex items-center justify-between gap-2 p-4">
-          <div className="flex items-center gap-2 min-w-0">
-            <div style={{
-              width: 26, height: 26, borderRadius: 7, flexShrink: 0,
-              background: 'var(--surface2)', border: '1px solid var(--border2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--accent3)'
-            }}>
-              {userEmail ? userEmail[0].toUpperCase() : '?'}
-            </div>
-            <p style={{
-              fontSize: 11, color: 'var(--text2)', fontFamily: 'IBM Plex Mono',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-            }} title={userEmail}>
-              {userEmail || 'Signed in'}
-            </p>
-          </div>
-          <button onClick={onSignOut} title="Sign out"
-            style={{
-              fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--text3)',
-              background: 'none', border: 'none', cursor: 'pointer', padding: '4px 2px',
-              flexShrink: 0, letterSpacing: '0.03em'
-            }}
-            onMouseEnter={e => e.currentTarget.style.color = 'var(--danger)'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--text3)'}
-          >
-            Sign out
-          </button>
         </div>
       </aside>
     </>
@@ -546,7 +482,6 @@ export default function Home() {
   const [selectedDocs, setSelectedDocs] = useState<string[]>([])
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [userId, setUserId] = useState<string>('')
-  const [userEmail, setUserEmail] = useState<string>('')
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [sharingId, setSharingId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -558,7 +493,6 @@ export default function Home() {
     if (!session) { window.location.href = '/login'; return }
     const uid = session.user.id
     setUserId(uid)
-    setUserEmail(session.user.email || '')
     // Restore last active session from localStorage, or create fresh one
     const stored = localStorage.getItem(`mv_session_${uid}`)
     if (stored) {
@@ -603,13 +537,7 @@ export default function Home() {
     } catch { /* silent */ }
   }
 
-  // useCallback with [] deps -- every call inside (setState setters,
-  // getGraphTopic, showToast) is stable/state-independent, so an empty
-  // dependency array is safe. This keeps the function reference stable
-  // across renders, which is REQUIRED for MessageBubble's React.memo above
-  // to actually skip re-renders -- a memoized component still re-renders
-  // if any of its function props get a new reference every render.
-  const handleViewGraph = useCallback(async (topic: string) => {
+  const handleViewGraph = async (topic: string) => {
     setGraphOpen(true)
     setGraphTopic(topic)
     setGraphLoading(true)
@@ -622,7 +550,7 @@ export default function Home() {
     } finally {
       setGraphLoading(false)
     }
-  }, [])
+  }
 
   const handleViewFullGraph = async () => {
     setGraphOpen(true)
@@ -696,10 +624,9 @@ export default function Home() {
           intent: result.intent,
           related_concepts: result.related_concepts || [],
         } : m))
-      } catch (err: any) {
-        const msg = err?.response?.data?.detail || err?.message || 'Could not reach MindVault. Please try again.'
-        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: msg } : m))
-        showToast(msg.length > 60 ? 'Request failed' : msg, 'error')
+      } catch {
+        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: 'Could not reach MindVault. Please try again.' } : m))
+        showToast('Backend unreachable', 'error')
       } finally { setLoading(false) }
       return
     }
@@ -768,10 +695,7 @@ export default function Home() {
       a.href = url; a.download = `mindvault-${sessionId.slice(0, 8)}.pdf`; a.click()
       URL.revokeObjectURL(url)
       showToast('PDF exported', 'success')
-    } catch (err: any) {
-      console.error('PDF export error:', err)
-      showToast(err?.message || 'PDF export failed', 'error')
-    }
+    } catch { showToast('PDF export failed', 'error') }
   }
 
   const handleNewSession = async () => {
@@ -841,10 +765,6 @@ export default function Home() {
     setMessages([]); showToast('History cleared', 'info')
   }
 
-  const handleSignOut = async () => {
-    await signOut()
-  }
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
@@ -859,7 +779,6 @@ export default function Home() {
         selectedDocs={selectedDocs} onToggleDoc={handleToggleDoc}
         sessions={sessions} onSelectSession={handleSelectSession} onDeleteSession={handleDeleteSession}
         onShare={handleShare} sharingId={sharingId}
-        userEmail={userEmail} onSignOut={handleSignOut}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--bg)' }}>
@@ -881,7 +800,7 @@ export default function Home() {
             <button
               className="mode-tab"
               onClick={handleViewFullGraph}
-              style={{ marginLeft: 6, color: 'var(--accent3)', borderColor: 'rgba(126,184,164,0.3)' }}
+              style={{ marginLeft: 6, color: 'var(--accent3)', borderColor: 'rgba(74,140,118,0.3)' }}
             >
               ⬡ Graph
             </button>
@@ -920,12 +839,13 @@ export default function Home() {
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--accent)',
-                background: 'rgba(126,184,164,0.08)', border: '1px solid rgba(126,184,164,0.2)',
+                background: 'rgba(74,140,118,0.08)', border: '1px solid rgba(74,140,118,0.2)',
                 borderRadius: 6, padding: '4px 10px'
               }}>
                 📎 {attachedFile.name}
                 <button onClick={() => setAttachedFile(null)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 12, padding: 0 }}
+                  className="tap-target"
+                  style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 13, padding: 0 }}
                   title="Remove attachment">✕</button>
               </span>
             </div>

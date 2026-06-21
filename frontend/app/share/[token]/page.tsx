@@ -55,7 +55,7 @@ export default function SharePage({ params }: { params: { token: string } }) {
 
         {error && (
           <div style={{
-            border: '1px solid rgba(196, 99, 90, 0.25)', background: 'rgba(196, 99, 90, 0.06)',
+            border: '1px solid rgba(181, 72, 61, 0.25)', background: 'rgba(181, 72, 61, 0.06)',
             borderRadius: 10, padding: '32px 24px', textAlign: 'center'
           }}>
             <p style={{ fontSize: 28, marginBottom: 10 }}>🔒</p>

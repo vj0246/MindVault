@@ -208,11 +208,11 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
 
   // Color based on source count
   const nodeColor = (n: GraphNode, isSelected: boolean, isHovered: boolean) => {
-    if (isSelected) return { fill: 'rgba(232,197,71,0.25)', stroke: 'rgba(232,197,71,0.9)', glow: true }
-    if (isHovered) return { fill: 'rgba(232,197,71,0.15)', stroke: 'rgba(232,197,71,0.6)', glow: false }
-    if (n.sources.length > 1) return { fill: 'rgba(196,149,106,0.15)', stroke: 'rgba(196,149,106,0.5)', glow: false }
-    if (n.connections > 3) return { fill: 'rgba(126,184,164,0.15)', stroke: 'rgba(126,184,164,0.5)', glow: false }
-    return { fill: 'rgba(100,120,150,0.1)', stroke: 'rgba(100,120,150,0.35)', glow: false }
+    if (isSelected) return { fill: 'rgba(184,144,46,0.25)', stroke: 'rgba(184,144,46,0.9)', glow: true }
+    if (isHovered) return { fill: 'rgba(184,144,46,0.15)', stroke: 'rgba(184,144,46,0.6)', glow: false }
+    if (n.sources.length > 1) return { fill: 'rgba(176,122,82,0.15)', stroke: 'rgba(176,122,82,0.5)', glow: false }
+    if (n.connections > 3) return { fill: 'rgba(74,140,118,0.15)', stroke: 'rgba(74,140,118,0.5)', glow: false }
+    return { fill: 'rgba(70,85,110,0.1)', stroke: 'rgba(70,85,110,0.35)', glow: false }
   }
 
   // Get connected nodes for selected
@@ -362,7 +362,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
               pointerEvents: 'none',
             }}>
               <span>Drag nodes · Scroll to zoom · Click node to select</span>
-              <span style={{ color: 'rgba(232,197,71,0.5)' }}>
+              <span style={{ color: 'rgba(184,144,46,0.5)' }}>
                 {selectedNode ? `Selected: ${selectedNode}` : 'Click a node to see connections'}
               </span>
             </div>
@@ -405,7 +405,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
                   </feMerge>
                 </filter>
                 <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-                  <path d="M 0 0 L 6 3 L 0 6 z" fill="rgba(232,197,71,0.3)" />
+                  <path d="M 0 0 L 6 3 L 0 6 z" fill="rgba(184,144,46,0.3)" />
                 </marker>
               </defs>
 
@@ -445,13 +445,13 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
                       <path
                         d={`M ${from.x} ${from.y} Q ${mx} ${my} ${to.x} ${to.y}`}
                         fill="none"
-                        stroke={isHighlighted ? 'rgba(232,197,71,0.35)' : 'rgba(232,197,71,0.15)'}
+                        stroke={isHighlighted ? 'rgba(184,144,46,0.35)' : 'rgba(184,144,46,0.15)'}
                         strokeWidth={isHighlighted ? 1.5 : 1}
                         markerEnd="url(#arrow)"
                       />
                       {isHighlighted && (
                         <text x={mx} y={my - 6} textAnchor="middle"
-                          style={{ fontSize: 8, fill: 'rgba(232,197,71,0.6)', fontFamily: 'IBM Plex Mono', pointerEvents: 'none' }}>
+                          style={{ fontSize: 8, fill: 'rgba(184,144,46,0.6)', fontFamily: 'IBM Plex Mono', pointerEvents: 'none' }}>
                           {edge.relation.length > 18 ? edge.relation.slice(0, 17) + '…' : edge.relation}
                         </text>
                       )}
@@ -482,7 +482,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
                       {(isSelected || isSearch) && (
                         <circle cx={node.x} cy={node.y} r={r + 8}
                           fill="none"
-                          stroke={isSearch ? 'rgba(126,184,164,0.4)' : 'rgba(232,197,71,0.2)'}
+                          stroke={isSearch ? 'rgba(74,140,118,0.4)' : 'rgba(184,144,46,0.2)'}
                           strokeWidth={1}
                           strokeDasharray="4 3"
                           filter="url(#softglow)"
@@ -501,12 +501,12 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
                       {/* Connection count badge */}
                       {node.connections > 0 && (
                         <circle cx={node.x + r * 0.7} cy={node.y - r * 0.7} r={6}
-                          fill="rgba(232,197,71,0.15)" stroke="rgba(232,197,71,0.4)" strokeWidth={0.5} />
+                          fill="rgba(184,144,46,0.15)" stroke="rgba(184,144,46,0.4)" strokeWidth={0.5} />
                       )}
                       {node.connections > 0 && (
                         <text x={node.x + r * 0.7} y={node.y - r * 0.7}
                           textAnchor="middle" dominantBaseline="middle"
-                          style={{ fontSize: 6, fill: 'rgba(232,197,71,0.8)', fontFamily: 'IBM Plex Mono', pointerEvents: 'none' }}>
+                          style={{ fontSize: 6, fill: 'rgba(184,144,46,0.8)', fontFamily: 'IBM Plex Mono', pointerEvents: 'none' }}>
                           {node.connections}
                         </text>
                       )}
@@ -530,7 +530,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
                       {node.sources.length > 1 && (
                         <text x={node.x} y={node.y + r + 10}
                           textAnchor="middle"
-                          style={{ fontSize: 7, fill: 'rgba(196,149,106,0.6)', fontFamily: 'IBM Plex Mono', pointerEvents: 'none' }}>
+                          style={{ fontSize: 7, fill: 'rgba(176,122,82,0.6)', fontFamily: 'IBM Plex Mono', pointerEvents: 'none' }}>
                           {node.sources.length} sources
                         </text>
                       )}
@@ -549,7 +549,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
           borderTop: '1px solid var(--border)',
           padding: '12px 16px',
           flexShrink: 0,
-          background: 'rgba(232,197,71,0.04)',
+          background: 'rgba(184,144,46,0.04)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <p style={{ fontSize: 13, color: 'var(--accent)', fontFamily: 'IBM Plex Mono', fontWeight: 600 }}>
@@ -606,10 +606,10 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
         <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Legend</span>
         <div style={{ display: 'flex', gap: 12 }}>
           {[
-            { color: 'rgba(126,184,164,0.5)', label: 'Hub node' },
-            { color: 'rgba(196,149,106,0.5)', label: 'Multi-source' },
-            { color: 'rgba(100,120,150,0.35)', label: 'Standard' },
-            { color: 'rgba(232,197,71,0.9)', label: 'Selected' },
+            { color: 'rgba(74,140,118,0.5)', label: 'Hub node' },
+            { color: 'rgba(176,122,82,0.5)', label: 'Multi-source' },
+            { color: 'rgba(70,85,110,0.35)', label: 'Standard' },
+            { color: 'rgba(184,144,46,0.9)', label: 'Selected' },
           ].map((l, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: l.color, border: `1px solid ${l.color}` }} />
