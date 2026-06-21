@@ -1,4 +1,5 @@
 import os
+import contextvars
 from concurrent.futures import ThreadPoolExecutor
 from rag.db import get_supabase
 from langchain_groq import ChatGroq
@@ -7,7 +8,19 @@ from langchain.schema.runnable import RunnablePassthrough, RunnableLambda
 from langchain.schema.messages import HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from graph.store import get_related_nodes
+from rag.cache import make_cache_key, get_cached, set_cached
 from dotenv import load_dotenv
+
+try:
+    from langsmith import traceable
+except ImportError:
+    # Tracing is observability, not core functionality -- if langsmith isn't
+    # installed for some reason, fall back to a no-op decorator instead of
+    # crashing the whole app.
+    def traceable(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator if not (args and callable(args[0])) else args[0]
 
 load_dotenv()
 
@@ -20,6 +33,7 @@ def _get_reranker():
         _RERANKER = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="/tmp/flashrank")
     return _RERANKER
 
+@traceable(name="flashrank_rerank", run_type="tool")
 def _rerank(query: str, chunks: list, top_k: int) -> list:
     """Cross-encoder re-rank via FlashRank. Falls back to RRF order if unavailable."""
     if not chunks:
@@ -75,6 +89,7 @@ def get_llm(temperature: float = 0.0):
 
 from rag.embedder import EMBED_MODEL
 
+@traceable(name="rrf_fusion", run_type="tool")
 def _rrf_merge(semantic: list, keyword: list, top_k: int, rrf_k: int = 60) -> list:
     """Reciprocal Rank Fusion — merges two ranked lists into one.
     Each returned chunk gets an 'rrf_score' field (raw RRF value,
@@ -102,6 +117,7 @@ def _rrf_merge(semantic: list, keyword: list, top_k: int, rrf_k: int = 60) -> li
     return result
 
 
+@traceable(name="semantic_search", run_type="retriever")
 def _run_semantic_search(supabase, embedding, k, user_id, document_ids):
     sem_params = {
         "query_embedding": embedding,
@@ -114,6 +130,7 @@ def _run_semantic_search(supabase, embedding, k, user_id, document_ids):
         sem_params["p_document_ids"] = document_ids
     return (supabase.rpc("match_chunks", sem_params).execute().data or [])
 
+@traceable(name="keyword_search", run_type="retriever")
 def _run_keyword_search(supabase, question, k, user_id, document_ids):
     try:
         kw_params = {"query_text": question, "match_count": k}
@@ -126,6 +143,7 @@ def _run_keyword_search(supabase, question, k, user_id, document_ids):
         print(f"[Retrieve] Keyword search failed, falling back to semantic only: {e}")
         return []
 
+@traceable(name="hybrid_retrieve", run_type="chain")
 def retrieve_context(question: str, k: int = 5, user_id: str = None, document_ids: list = None) -> dict:
     supabase = get_supabase()
     embedding = list(EMBED_MODEL.embed([question]))[0].tolist()
@@ -137,9 +155,17 @@ def retrieve_context(question: str, k: int = 5, user_id: str = None, document_id
     # ThreadPoolExecutor runs them concurrently instead.
     # k reduced from k*2 to k for keyword pool -- rerank narrows either way,
     # fetching a wider keyword pool added Supabase latency with no quality gain.
+    #
+    # ctx.run(...) below: LangSmith's @traceable tracks the current trace via
+    # Python contextvars, which do NOT cross thread boundaries by default.
+    # Without this, the semantic_search/keyword_search spans would show up
+    # as disconnected root traces in LangSmith instead of nested children of
+    # this hybrid_retrieve span. copy_context() captures the active tracing
+    # context here (in the main thread) so the worker threads run inside it.
+    ctx = contextvars.copy_context()
     with ThreadPoolExecutor(max_workers=2) as executor:
-        sem_future = executor.submit(_run_semantic_search, supabase, embedding, k, user_id, document_ids)
-        kw_future = executor.submit(_run_keyword_search, supabase, question, k, user_id, document_ids)
+        sem_future = executor.submit(ctx.run, _run_semantic_search, supabase, embedding, k, user_id, document_ids)
+        kw_future = executor.submit(ctx.run, _run_keyword_search, supabase, question, k, user_id, document_ids)
         semantic_chunks = sem_future.result()
         keyword_chunks = kw_future.result()
 
@@ -206,6 +232,7 @@ def format_history(history: list) -> list:
             messages.append(AIMessage(content=msg["content"]))
     return messages
 
+@traceable(name="classify_intent", run_type="chain")
 def classify_intent(question: str) -> str:
     q = question.lower()
     
@@ -250,6 +277,7 @@ One word:
     valid_intents = ["compare", "test", "summarize", "answer"]
     return intent if intent in valid_intents else "answer"
 
+@traceable(name="resolve_and_classify", run_type="chain")
 def resolve_and_classify(question: str, history: list) -> dict:
     llm = get_llm()
     history_str = "\n".join([
@@ -298,6 +326,10 @@ INTENT: [one word]
 
     return {"resolved": resolved, "intent": intent}
 
+# Not wrapped with @traceable: this function only BUILDS a chain object,
+# it doesn't execute it -- the actual LLM call happens later when .invoke()
+# runs inside query_rag/stream_rag (which ARE traced), so LangChain's own
+# auto-instrumentation picks it up as a nested span there automatically.
 def build_router_chain(history: list):
     llm = get_llm()
     router_prompt = ChatPromptTemplate.from_template("""
@@ -357,6 +389,10 @@ Answer:"""
 
     llm = get_llm()
 
+    # Wrapped here, not on build_retrieval_chain itself -- build_retrieval_chain
+    # only constructs the prompt and returns this closure; the actual work
+    # (retrieval + LLM call) happens when run_chain() is invoked later.
+    @traceable(name=f"answer_chain[{mode}]", run_type="chain")
     def run_chain(input: dict) -> dict:
         retrieved = retrieve_context(input["question"], k=5, user_id=user_id, document_ids=document_ids)
         result = (prompt | llm | StrOutputParser()).invoke({
@@ -368,6 +404,7 @@ Answer:"""
 
     return run_chain
 
+@traceable(name="summarize_chain", run_type="chain")
 def summarize_chain(question: str, mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
     llm = get_llm(temperature=0.15)
     retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
@@ -393,6 +430,7 @@ Context:\n{context}\nRequest: {question}\nSummary:"""
     })
     return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", []), "confidence": retrieved.get("confidence", 0.0)}
 
+@traceable(name="comparison_chain", run_type="chain")
 def comparison_chain(question: str, mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
     llm = get_llm(temperature=0.15)
     retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
@@ -420,6 +458,7 @@ Context:\n{context}\nComparison request: {question}\nComparison:
     })
     return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", []), "confidence": retrieved.get("confidence", 0.0)}
 
+@traceable(name="test_generator_chain", run_type="chain")
 def test_generator_chain(question: str, user_id: str = None, document_ids: list = None) -> dict:
     llm = get_llm(temperature=0.15)
     retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
@@ -448,6 +487,7 @@ Content:\n{context}\nTopic: {question}\nQuestions:
     })
     return {"answer": answer, "sources": retrieved["sources"], "chunks": retrieved.get("chunks", []), "confidence": retrieved.get("confidence", 0.0)}
 
+@traceable(name="query_with_attachment", run_type="chain")
 def query_with_attachment(question: str, attachment_text: str, attachment_name: str,
                            history: list = [], mode: str = "default",
                            user_id: str = None, document_ids: list = None) -> dict:
@@ -525,6 +565,7 @@ Answer:""")
         "related_concepts": []
     }
 
+@traceable(name="query_rag", run_type="chain")
 def query_rag(question: str, history: list = [], mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
     print(f"[Debug] question={question}, history={len(history)}")
 
@@ -622,6 +663,7 @@ Answer:""")
     }
 
 
+@traceable(name="stream_rag", run_type="chain")
 def stream_rag(question: str, history: list = [], mode: str = "default",
                user_id: str = None, document_ids: list = None):
     """
@@ -660,6 +702,28 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
     # instead of the combined resolve+classify call.
     has_reference = history and any(w in question.lower() for w in REFERENCE_WORDS)
 
+    # Cache only applies to standalone questions -- a reference-dependent
+    # follow-up ("elaborate on that") means different things depending on
+    # prior conversation, so it can't be safely keyed by question text alone.
+    # cache_key stays None for reference questions, which skips both the
+    # read below and the write at the end of each response branch.
+    cache_key = None
+    if not has_reference:
+        cache_key = make_cache_key(question, user_id or "", document_ids or [], mode)
+        cached = get_cached(cache_key)
+        if cached:
+            yield f'data: {json.dumps({"type": "meta", "sources": cached.get("sources", []), "intent": cached.get("intent", "answer"), "confidence": cached.get("confidence", 0.0), "chunks": cached.get("chunks", [])})}\n\n'
+            # Pseudo-stream the cached answer in small word groups -- the
+            # frontend's SSE handling needs zero changes, it just receives
+            # token events faster since there's no real LLM generation delay.
+            cached_answer = cached.get("answer", "")
+            words = cached_answer.split(" ")
+            for i in range(0, len(words), 4):
+                chunk_text = " ".join(words[i:i + 4]) + (" " if i + 4 < len(words) else "")
+                yield f'data: {json.dumps({"type": "token", "text": chunk_text})}\n\n'
+            yield f'data: {json.dumps({"type": "done", "related_concepts": cached.get("related_concepts", []), "full_answer": cached_answer})}\n\n'
+            return
+
     if has_reference:
         combined = resolve_and_classify(question, history)
         resolved_question = combined["resolved"]
@@ -683,6 +747,7 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
 
     # For non-answer intents, run non-streaming and yield full answer
     if intent in ("compare", "test", "summarize") or decision == "history":
+        _cache_sources, _cache_chunks, _cache_confidence = [], [], 0.0
         if decision == "history":
             history_str = "\n".join([f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}" for m in history[-6:]])
             history_prompt = ChatPromptTemplate.from_template(
@@ -693,27 +758,43 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
         elif intent == "compare":
             result = comparison_chain(resolved_question, mode, user_id=user_id, document_ids=document_ids)
             answer = result["answer"]
+            _cache_sources, _cache_chunks, _cache_confidence = result.get("sources", []), result.get("chunks", []), result.get("confidence", 0.0)
             yield f'data: {json.dumps({"type": "meta", "sources": result.get("sources", []), "intent": intent, "confidence": result.get("confidence", 0.0), "chunks": result.get("chunks", [])})}\n\n'
         elif intent == "test":
             result = test_generator_chain(resolved_question, user_id=user_id, document_ids=document_ids)
             answer = result["answer"]
+            _cache_sources, _cache_chunks, _cache_confidence = result.get("sources", []), result.get("chunks", []), result.get("confidence", 0.0)
             yield f'data: {json.dumps({"type": "meta", "sources": result.get("sources", []), "intent": intent, "confidence": result.get("confidence", 0.0), "chunks": result.get("chunks", [])})}\n\n'
         else:
             result = summarize_chain(resolved_question, mode, user_id=user_id, document_ids=document_ids)
             answer = result["answer"]
+            _cache_sources, _cache_chunks, _cache_confidence = result.get("sources", []), result.get("chunks", []), result.get("confidence", 0.0)
             yield f'data: {json.dumps({"type": "meta", "sources": result.get("sources", []), "intent": intent, "confidence": result.get("confidence", 0.0), "chunks": result.get("chunks", [])})}\n\n'
 
         # Kick off graph lookup on a background thread BEFORE streaming tokens,
         # so it computes in parallel instead of adding latency after the
         # answer is already done. It's pure Supabase reads (no LLM), so this
         # mainly saves wall-clock time rather than Groq cost.
+        # ctx.run(...) preserves the LangSmith trace context across the
+        # thread boundary -- same reasoning as in retrieve_context above.
+        _ctx = contextvars.copy_context()
         with ThreadPoolExecutor(max_workers=1) as _graph_executor:
-            _graph_future = _graph_executor.submit(get_related_nodes, resolved_question, user_id=user_id)
+            _graph_future = _graph_executor.submit(_ctx.run, lambda: get_related_nodes(resolved_question, user_id=user_id))
 
             for token in answer:
                 yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
 
             related = _graph_future.result().get("nodes", [])
+
+        # cache_key is only set for standalone questions (see above) -- this
+        # naturally excludes the "history" decision branch too, since that
+        # branch is only reachable when has_reference was true.
+        if cache_key:
+            set_cached(cache_key, {
+                "answer": answer, "sources": _cache_sources, "chunks": _cache_chunks,
+                "confidence": _cache_confidence, "intent": intent, "related_concepts": related
+            })
+
         yield f'data: {json.dumps({"type": "done", "related_concepts": related, "full_answer": answer})}\n\n'
         return
 
@@ -739,12 +820,15 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
     )
 
     full_answer = ""
+    _ctx2 = contextvars.copy_context()
     with ThreadPoolExecutor(max_workers=1) as _graph_executor:
         # Same optimization: graph lookup runs concurrently with token
         # streaming instead of after it. By the time the LLM finishes
         # generating (typically 1-3s for a 150-word answer), the graph
         # query (50-150ms) is long done -- this fully hides its latency.
-        _graph_future = _graph_executor.submit(get_related_nodes, resolved_question, user_id=user_id)
+        # ctx.run(...) again preserves LangSmith trace nesting across the
+        # thread boundary.
+        _graph_future = _graph_executor.submit(_ctx2.run, lambda: get_related_nodes(resolved_question, user_id=user_id))
 
         for token in (prompt | llm | StrOutputParser()).stream({
             "context": retrieved["context"],
@@ -754,5 +838,12 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
             yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
 
         related = _graph_future.result().get("nodes", [])
+
+    if cache_key:
+        set_cached(cache_key, {
+            "answer": full_answer, "sources": retrieved.get("sources", []),
+            "chunks": retrieved.get("chunks", []), "confidence": retrieved.get("confidence", 0.0),
+            "intent": intent, "related_concepts": related
+        })
 
     yield f'data: {json.dumps({"type": "done", "related_concepts": related, "full_answer": full_answer})}\n\n'

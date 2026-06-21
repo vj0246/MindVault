@@ -9,6 +9,17 @@ from rag.db import get_supabase
 from groq import Groq
 from dotenv import load_dotenv
 
+try:
+    from langsmith import traceable
+except ImportError:
+    # Tracing is observability, not core functionality -- same fallback
+    # pattern as retrieve1.py, so ingestion never breaks if langsmith is
+    # ever unavailable.
+    def traceable(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator if not (args and callable(args[0])) else args[0]
+
 load_dotenv()
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}
@@ -55,6 +66,7 @@ def load_document(file_path: str) -> list:
         raise ValueError(f"Unsupported file type: {ext}")
 
 
+@traceable(name="ingest_image_ocr", run_type="llm")
 def load_image_via_groq(file_path: str) -> list:
     ext = os.path.splitext(file_path)[1].lower()
     mime_type = IMAGE_MIME.get(ext, "image/jpeg")
@@ -198,6 +210,7 @@ def _process_block(text: str, header: str, store: dict) -> list:
     return [c for c in chunks if len(c.strip()) > 30]
 
 
+@traceable(name="ingest_chunk_documents", run_type="chain")
 def chunk_documents(pages, filename="") -> list:
     """
     Smart chunking pipeline:
@@ -240,6 +253,7 @@ def chunk_documents(pages, filename="") -> list:
 # Embed + Store
 # ─────────────────────────────────────────────
 
+@traceable(name="ingest_embed_and_store", run_type="chain")
 def embed_and_store(chunks, document_id: str, filename: str, user_id: str):
     if not chunks:
         # fastembed.embed([]) on an empty list can misbehave -- guard explicitly.
@@ -271,6 +285,7 @@ def embed_and_store(chunks, document_id: str, filename: str, user_id: str):
     print(f"[Ingest] Stored {len(rows)} chunks")
 
 
+@traceable(name="ingest_document", run_type="chain")
 def ingest_document(file_path: str, document_id: str, user_id: str, **kwargs):
     print(f"[Ingest] Loading: {file_path}")
     pages = load_document(file_path)

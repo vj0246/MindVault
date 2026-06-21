@@ -84,7 +84,10 @@ async def upload_file(file: UploadFile = File(...), background_tasks: Background
         )
 
         try:
-            chunks = ingest_document(file_path, document_id=actual_document_id, user_id=str(user.id))
+            chunks = ingest_document(
+                file_path, document_id=actual_document_id, user_id=str(user.id),
+                langsmith_extra={"metadata": {"user_id": str(user.id), "filename": file.filename, "document_id": actual_document_id}}
+            )
         except ValueError as e:
             # Clean, user-facing error (empty/unreadable document) -- remove
             # the orphaned chunk_count=0 row created by log_document above
@@ -141,7 +144,13 @@ def query(req: QueryRequest, user=Depends(get_current_user)):
             history=history,
             mode=req.mode,
             user_id=str(user.id),
-            document_ids=req.document_ids or None
+            document_ids=req.document_ids or None,
+            # @traceable functions accept a reserved langsmith_extra kwarg --
+            # stripped before the call, used to attach metadata/tags to the
+            # trace. Without this, every trace in LangSmith looks identical;
+            # with it, you can filter/search by user_id, session_id, or mode
+            # in the dashboard instead of opening traces one by one.
+            langsmith_extra={"metadata": {"user_id": str(user.id), "session_id": req.session_id, "mode": req.mode}}
         )
 
         save_session_message(req.session_id, role="user", content=req.question, user_id=str(user.id))
@@ -180,7 +189,8 @@ async def query_stream(req: QueryRequest, user=Depends(get_current_user)):
                 history=history,
                 mode=req.mode,
                 user_id=str(user.id),
-                document_ids=req.document_ids or None
+                document_ids=req.document_ids or None,
+                langsmith_extra={"metadata": {"user_id": str(user.id), "session_id": req.session_id, "mode": req.mode}}
             ):
                 if '"type": "done"' in event:
                     import json as _json
@@ -267,7 +277,8 @@ async def query_with_attachment_route(
             history=history,
             mode=mode,
             user_id=str(user.id),
-            document_ids=doc_ids or None
+            document_ids=doc_ids or None,
+            langsmith_extra={"metadata": {"user_id": str(user.id), "session_id": session_id, "mode": mode, "has_attachment": True}}
         )
 
         # Store the question with a marker so history shows the attachment was used
