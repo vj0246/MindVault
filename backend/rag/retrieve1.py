@@ -162,10 +162,11 @@ def retrieve_context(question: str, k: int = 5, user_id: str = None, document_id
     # as disconnected root traces in LangSmith instead of nested children of
     # this hybrid_retrieve span. copy_context() captures the active tracing
     # context here (in the main thread) so the worker threads run inside it.
-    ctx = contextvars.copy_context()
+    ctx1 = contextvars.copy_context()
+    ctx2 = contextvars.copy_context()
     with ThreadPoolExecutor(max_workers=2) as executor:
-        sem_future = executor.submit(ctx.run, _run_semantic_search, supabase, embedding, k, user_id, document_ids)
-        kw_future = executor.submit(ctx.run, _run_keyword_search, supabase, question, k, user_id, document_ids)
+        sem_future = executor.submit(ctx1.run, _run_semantic_search, supabase, embedding, k, user_id, document_ids)
+        kw_future = executor.submit(ctx2.run, _run_keyword_search, supabase, question, k, user_id, document_ids)
         semantic_chunks = sem_future.result()
         keyword_chunks = kw_future.result()
 
