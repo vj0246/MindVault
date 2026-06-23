@@ -162,9 +162,13 @@ def retrieve_context(question: str, k: int = 5, user_id: str = None, document_id
     # as disconnected root traces in LangSmith instead of nested children of
     # this hybrid_retrieve span. copy_context() captures the active tracing
     # context here (in the main thread) so the worker threads run inside it.
+    #ctx = contextvars.copy_context()
     ctx1 = contextvars.copy_context()
     ctx2 = contextvars.copy_context()
     with ThreadPoolExecutor(max_workers=2) as executor:
+        #sem_future = executor.submit(ctx.run, _run_semantic_search, supabase, embedding, k, user_id, document_ids)
+        #kw_future = executor.submit(ctx.run, _run_keyword_search, supabase, question, k, user_id, document_ids)
+        
         sem_future = executor.submit(ctx1.run, _run_semantic_search, supabase, embedding, k, user_id, document_ids)
         kw_future = executor.submit(ctx2.run, _run_keyword_search, supabase, question, k, user_id, document_ids)
         semantic_chunks = sem_future.result()
@@ -778,9 +782,8 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
         # mainly saves wall-clock time rather than Groq cost.
         # ctx.run(...) preserves the LangSmith trace context across the
         # thread boundary -- same reasoning as in retrieve_context above.
-        _ctx = contextvars.copy_context()
         with ThreadPoolExecutor(max_workers=1) as _graph_executor:
-            _graph_future = _graph_executor.submit(_ctx.run, lambda: get_related_nodes(resolved_question, user_id=user_id))
+            _graph_future = _graph_executor.submit(get_related_nodes, resolved_question, user_id=user_id)
 
             for token in answer:
                 yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
@@ -821,15 +824,11 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
     )
 
     full_answer = ""
-    _ctx2 = contextvars.copy_context()
     with ThreadPoolExecutor(max_workers=1) as _graph_executor:
-        # Same optimization: graph lookup runs concurrently with token
-        # streaming instead of after it. By the time the LLM finishes
-        # generating (typically 1-3s for a 150-word answer), the graph
-        # query (50-150ms) is long done -- this fully hides its latency.
-        # ctx.run(...) again preserves LangSmith trace nesting across the
-        # thread boundary.
-        _graph_future = _graph_executor.submit(_ctx2.run, lambda: get_related_nodes(resolved_question, user_id=user_id))
+        # No copy_context() -- get_related_nodes is pure Supabase reads, no LLM.
+        # copy_context().run() inside an active @traceable span causes
+        # "cannot enter context: already entered" on Python 3.14.
+        _graph_future = _graph_executor.submit(get_related_nodes, resolved_question, user_id=user_id)
 
         for token in (prompt | llm | StrOutputParser()).stream({
             "context": retrieved["context"],

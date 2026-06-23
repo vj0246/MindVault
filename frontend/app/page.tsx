@@ -51,6 +51,7 @@ interface ChatSession {
   name: string
   created_at: string
   last_active: string
+  number?: number
 }
 
 interface ChunkSource {
