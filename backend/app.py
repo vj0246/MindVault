@@ -16,7 +16,14 @@ from rag.memory import (
 from metadata.tracker import log_document, get_all_documents
 from graph.extractor import extract_entities_and_relations
 from graph.store import add_to_graph, get_related_nodes, get_full_graph
+from security.rate_limit import enforce_rate_limit
+from security.guardrails import moderate_input
 from dotenv import load_dotenv
+
+# Per-user/hour caps. IP cap is 3x this (see security/rate_limit.py) as a
+# secondary backstop against one IP running many accounts.
+QUERY_RATE_LIMIT = 100
+UPLOAD_RATE_LIMIT = 20
 
 load_dotenv()
 
@@ -58,8 +65,9 @@ def _build_graph_for_chunks(chunks, filename: str, user_id: str):
             print(f"[Graph] Background extraction failed for a chunk: {e}")
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks = None, user=Depends(get_current_user)):
+async def upload_file(request: Request, file: UploadFile = File(...), background_tasks: BackgroundTasks = None, user=Depends(get_current_user)):
     try:
+        enforce_rate_limit("upload", str(user.id), request.client.host, UPLOAD_RATE_LIMIT)
         sb = get_supabase()
         ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx", ".doc", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}
         ext = os.path.splitext(file.filename)[1].lower()
@@ -133,10 +141,22 @@ class ExportRequest(BaseModel):
     format: str = "markdown"
 
 @app.post("/query")
-def query(req: QueryRequest, user=Depends(get_current_user)):
+def query(req: QueryRequest, request: Request, user=Depends(get_current_user)):
     try:
         if not req.question.strip():
             raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+        enforce_rate_limit("query", str(user.id), request.client.host, QUERY_RATE_LIMIT)
+
+        mod = moderate_input(req.question)
+        if mod["flagged"]:
+            refusal = f"I can't help with that request. {mod['reason']}".strip()
+            save_session_message(req.session_id, role="user", content=req.question, user_id=str(user.id))
+            save_session_message(req.session_id, role="assistant", content=refusal, user_id=str(user.id))
+            return {
+                "answer": refusal, "sources": [], "chunks": [], "confidence": 0.0,
+                "mode": req.mode, "intent": "blocked", "related_concepts": []
+            }
 
         history = get_session_history(req.session_id, user_id=str(user.id))
         result = query_rag(
@@ -171,7 +191,7 @@ def query(req: QueryRequest, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/query/stream")
-async def query_stream(req: QueryRequest, user=Depends(get_current_user)):
+async def query_stream(req: QueryRequest, request: Request, user=Depends(get_current_user)):
     """Streaming version of /query. Returns SSE (text/event-stream).
     Events:
       {"type":"meta",  "sources":[...], "intent":"...", "confidence":0.8, "chunks":[...]}
@@ -179,10 +199,23 @@ async def query_stream(req: QueryRequest, user=Depends(get_current_user)):
       {"type":"done",  "related_concepts":[...], "full_answer":"..."}
     Frontend should accumulate tokens, then save full_answer from done event.
     """
+    enforce_rate_limit("query", str(user.id), request.client.host, QUERY_RATE_LIMIT)
     history = get_session_history(req.session_id, user_id=str(user.id))
 
     async def event_generator():
+        import json as _json
         full_answer = ""
+
+        mod = moderate_input(req.question)
+        if mod["flagged"]:
+            refusal = f"I can't help with that request. {mod['reason']}".strip()
+            yield f'data: {_json.dumps({"type": "meta", "sources": [], "intent": "blocked", "confidence": 0.0, "chunks": []})}\n\n'
+            yield f'data: {_json.dumps({"type": "token", "text": refusal})}\n\n'
+            yield f'data: {_json.dumps({"type": "done", "related_concepts": [], "full_answer": refusal})}\n\n'
+            save_session_message(req.session_id, role="user", content=req.question, user_id=str(user.id))
+            save_session_message(req.session_id, role="assistant", content=refusal, user_id=str(user.id))
+            return
+
         try:
             for event in stream_rag(
                 question=req.question,
@@ -211,6 +244,7 @@ async def query_stream(req: QueryRequest, user=Depends(get_current_user)):
 
 @app.post("/query-with-attachment")
 async def query_with_attachment_route(
+    request: Request,
     file: UploadFile = File(...),
     question: str = Form(...),
     session_id: str = Form("default_session"),
@@ -226,6 +260,21 @@ async def query_with_attachment_route(
     try:
         if not question.strip():
             raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+        enforce_rate_limit("query", str(user.id), request.client.host, QUERY_RATE_LIMIT)
+
+        # Check the question text before doing any file parsing -- cheap
+        # fail-fast on a flagged request avoids burning CPU on the attachment.
+        mod = moderate_input(question)
+        if mod["flagged"]:
+            refusal = f"I can't help with that request. {mod['reason']}".strip()
+            user_msg = f"[Attached: {file.filename}] {question}"
+            save_session_message(session_id, role="user", content=user_msg, user_id=str(user.id))
+            save_session_message(session_id, role="assistant", content=refusal, user_id=str(user.id))
+            return {
+                "answer": refusal, "sources": [], "chunks": [], "confidence": 0.0,
+                "mode": mode, "intent": "blocked", "related_concepts": []
+            }
 
         ext = os.path.splitext(file.filename)[1].lower()
         ALLOWED = {".pdf", ".txt", ".md", ".docx", ".doc", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}

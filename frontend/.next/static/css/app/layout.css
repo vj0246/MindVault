@@ -1,5 +1,5 @@
 /*!*************************************************************************************************************************************************************************************************************************************************************!*\
-  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[13].oneOf[12].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[13].oneOf[12].use[3]!./app/globals.css ***!
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[12].use[3]!./app/globals.css ***!
   \*************************************************************************************************************************************************************************************************************************************************************/
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Epilogue:wght@300;400;500;600&display=swap');
 
@@ -576,6 +576,15 @@ video {
 .relative{
   position: relative;
 }
+.inset-0{
+  inset: 0px;
+}
+.z-40{
+  z-index: 40;
+}
+.z-50{
+  z-index: 50;
+}
 .mx-auto{
   margin-left: auto;
   margin-right: auto;
@@ -585,6 +594,12 @@ video {
 }
 .mb-2{
   margin-bottom: 0.5rem;
+}
+.mb-8{
+  margin-bottom: 2rem;
+}
+.mr-2{
+  margin-right: 0.5rem;
 }
 .mt-1{
   margin-top: 0.25rem;
@@ -600,6 +615,9 @@ video {
 }
 .flex{
   display: flex;
+}
+.inline-flex{
+  display: inline-flex;
 }
 .grid{
   display: grid;
@@ -637,6 +655,14 @@ video {
 .flex-shrink-0{
   flex-shrink: 0;
 }
+.-translate-x-full{
+  --tw-translate-x: -100%;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+.translate-x-0{
+  --tw-translate-x: 0px;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
 .transform{
   transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
@@ -660,6 +686,9 @@ video {
 }
 .items-center{
   align-items: center;
+}
+.justify-start{
+  justify-content: flex-start;
 }
 .justify-end{
   justify-content: flex-end;
@@ -706,6 +735,12 @@ video {
 .border{
   border-width: 1px;
 }
+.bg-black\/60{
+  background-color: rgb(0 0 0 / 0.6);
+}
+.p-1{
+  padding: 0.25rem;
+}
 .p-4{
   padding: 1rem;
 }
@@ -716,13 +751,13 @@ video {
   padding-left: 0.25rem;
   padding-right: 0.25rem;
 }
+.px-4{
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
 .px-6{
   padding-left: 1.5rem;
   padding-right: 1.5rem;
-}
-.px-8{
-  padding-left: 2rem;
-  padding-right: 2rem;
 }
 .py-2{
   padding-top: 0.5rem;
@@ -764,21 +799,35 @@ video {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
+.transition-transform{
+  transition-property: transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+.duration-300{
+  transition-duration: 300ms;
+}
 
 :root {
-  --bg: #0c0c0c;
-  --surface: #141414;
-  --surface2: #1a1a1a;
-  --border: #242424;
-  --border2: #2e2e2e;
-  --text: #e8e4dc;
-  --text2: #9a9589;
-  --text3: #5a5650;
-  --accent: #e8c547;
-  --accent2: #c4956a;
-  --accent3: #7eb8a4;
-  --danger: #c4635a;
-  --glow: rgba(232, 197, 71, 0.15);
+  /* Warm off-white, not stark #fff -- pure white reads clinical/cheap at
+     this scale; a warm near-white feels considered, like good paper. */
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --surface2: #f2f0ea;
+  --border: #e8e5dd;
+  --border2: #d6d2c7;
+  --text: #2b2823;
+  --text2: #6b675f;
+  --text3: #9a958a;
+  /* Same brand hues as the dark theme (gold/terracotta/teal), deepened.
+     The original pale gold/teal were tuned for contrast against near-black
+     and read washed-out/pastel against white -- same identity, recalibrated
+     for the new background, not a different palette. */
+  --accent: #b8902e;
+  --accent2: #b07a52;
+  --accent3: #4a8c76;
+  --danger: #b5483d;
+  --glow: rgba(184, 144, 46, 0.10);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -792,21 +841,16 @@ html, body {
 }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+* { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
 
-/* Grain overlay */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
-  pointer-events: none;
-  z-index: 1000;
-  opacity: 0.4;
-}
+/* Grain overlay removed for the light theme -- the same noise texture
+   that read as subtle premium grain on near-black reads as smudged/dirty
+   paper on a white surface. Clean light-mode SaaS products (Linear,
+   Stripe, Vercel) don't use grain on light surfaces for this reason. */
 
 /* Sidebar */
 .sidebar {
@@ -843,19 +887,19 @@ body::before {
   padding: 16px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
 }
 
 .upload-zone:hover {
   border-color: var(--accent);
-  background: rgba(232, 197, 71, 0.04);
+  background: rgba(184, 144, 46, 0.04);
 }
 
 .upload-zone.drag-over {
   border-color: var(--accent);
-  background: rgba(232, 197, 71, 0.08);
+  background: rgba(184, 144, 46, 0.08);
 }
 
 /* Doc item */
@@ -866,7 +910,7 @@ body::before {
   padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid transparent;
 }
 
@@ -876,8 +920,8 @@ body::before {
 }
 
 .doc-item.active {
-  background: rgba(232, 197, 71, 0.06);
-  border-color: rgba(232, 197, 71, 0.2);
+  background: rgba(184, 144, 46, 0.06);
+  border-color: rgba(184, 144, 46, 0.2);
 }
 
 /* Mode tabs */
@@ -889,7 +933,7 @@ body::before {
   border: 1px solid var(--border2);
   color: var(--text3);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -897,8 +941,8 @@ body::before {
 .mode-tab:hover { color: var(--text2); border-color: var(--border2); }
 
 .mode-tab.active {
-  background: rgba(232, 197, 71, 0.1);
-  border-color: rgba(232, 197, 71, 0.4);
+  background: rgba(184, 144, 46, 0.1);
+  border-color: rgba(184, 144, 46, 0.4);
   color: var(--accent);
 }
 
@@ -929,10 +973,10 @@ body::before {
   border-radius: 3px;
 }
 
-.intent-answer  { background: rgba(126, 184, 164, 0.12); color: var(--accent3); border: 1px solid rgba(126, 184, 164, 0.25); }
-.intent-compare { background: rgba(196, 149, 106, 0.12); color: var(--accent2); border: 1px solid rgba(196, 149, 106, 0.25); }
-.intent-test    { background: rgba(232, 197, 71, 0.10); color: var(--accent);  border: 1px solid rgba(232, 197, 71, 0.25); }
-.intent-summarize { background: rgba(180, 120, 200, 0.10); color: #c4a0d8; border: 1px solid rgba(180, 120, 200, 0.25); }
+.intent-answer  { background: rgba(74, 140, 118, 0.12); color: var(--accent3); border: 1px solid rgba(74, 140, 118, 0.25); }
+.intent-compare { background: rgba(176, 122, 82, 0.12); color: var(--accent2); border: 1px solid rgba(176, 122, 82, 0.25); }
+.intent-test    { background: rgba(184, 144, 46, 0.10); color: var(--accent);  border: 1px solid rgba(184, 144, 46, 0.25); }
+.intent-summarize { background: rgba(155, 111, 176, 0.10); color: #9b6fb0; border: 1px solid rgba(155, 111, 176, 0.25); }
 
 /* Source chip */
 .source-chip {
@@ -940,9 +984,9 @@ body::before {
   font-size: 9px;
   padding: 2px 7px;
   border-radius: 3px;
-  background: rgba(232, 197, 71, 0.06);
-  border: 1px solid rgba(232, 197, 71, 0.15);
-  color: rgba(232, 197, 71, 0.6);
+  background: rgba(184, 144, 46, 0.06);
+  border: 1px solid rgba(184, 144, 46, 0.15);
+  color: rgba(184, 144, 46, 0.6);
   letter-spacing: 0.03em;
 }
 
@@ -952,16 +996,16 @@ body::before {
   font-size: 10px;
   padding: 3px 9px;
   border-radius: 4px;
-  background: rgba(126, 184, 164, 0.08);
-  border: 1px solid rgba(126, 184, 164, 0.2);
+  background: rgba(74, 140, 118, 0.08);
+  border: 1px solid rgba(74, 140, 118, 0.2);
   color: var(--accent3);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .concept-tag:hover {
-  background: rgba(126, 184, 164, 0.15);
-  border-color: rgba(126, 184, 164, 0.4);
+  background: rgba(74, 140, 118, 0.15);
+  border-color: rgba(74, 140, 118, 0.4);
 }
 
 /* Input */
@@ -974,13 +1018,13 @@ body::before {
   border-radius: 10px;
   padding: 12px 16px;
   resize: none;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   width: 100%;
 }
 
 .vault-input:focus {
   outline: none;
-  border-color: rgba(232, 197, 71, 0.4);
+  border-color: rgba(184, 144, 46, 0.4);
 }
 
 .vault-input::-moz-placeholder { color: var(--text3); }
@@ -998,16 +1042,16 @@ body::before {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   font-size: 16px;
   font-weight: 600;
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #f0d060;
+  background: #c9a23f;
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(232, 197, 71, 0.3);
+  box-shadow: 0 4px 16px rgba(184, 144, 46, 0.3);
 }
 
 .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -1078,14 +1122,14 @@ body::before {
   border-radius: 8px;
   padding: 12px 14px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   background: var(--surface);
   text-align: left;
 }
 
 .suggestion:hover {
-  border-color: rgba(232, 197, 71, 0.3);
-  background: rgba(232, 197, 71, 0.04);
+  border-color: rgba(184, 144, 46, 0.3);
+  background: rgba(184, 144, 46, 0.04);
   transform: translateY(-1px);
 }
 
@@ -1129,7 +1173,7 @@ body::before {
   border: 1px solid var(--border2);
   color: var(--text3);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   background: transparent;
   width: 100%;
   text-align: center;
@@ -1137,7 +1181,7 @@ body::before {
 
 .action-btn:hover { color: var(--text2); border-color: var(--border2); background: var(--surface2); }
 
-.action-btn.danger:hover { color: var(--danger); border-color: rgba(196, 99, 90, 0.3); }
+.action-btn.danger:hover { color: var(--danger); border-color: rgba(181, 72, 61, 0.3); }
 
 /* Spinner */
 .spinner {
@@ -1169,6 +1213,85 @@ body::before {
   white-space: nowrap;
 }
 
-.toast.success { border-color: rgba(126, 184, 164, 0.3); color: var(--accent3); }
-.toast.error   { border-color: rgba(196, 99, 90, 0.3);  color: var(--danger); }
+.toast.success { border-color: rgba(74, 140, 118, 0.3); color: var(--accent3); }
+.toast.error   { border-color: rgba(181, 72, 61, 0.3);  color: var(--danger); }
 
+/* Press feedback -- subtle, fast, makes the UI feel responsive to touch
+   and click alike instead of interactive elements feeling inert. */
+.action-btn:active,
+.send-btn:active:not(:disabled),
+.mode-tab:active,
+.doc-item:active,
+.suggestion:active,
+.upload-zone:active {
+  transform: scale(0.97);
+}
+
+/* ── Mobile ──────────────────────────────────────────────────────────────
+   Real fixes, not just smaller fonts:
+   - 16px input font-size prevents iOS Safari's auto-zoom-on-focus, which
+     otherwise fires on any input/textarea under 16px and is jarring on a
+     chat app where the input is the primary interaction.
+   - 44px is Apple's own minimum recommended tap target; several icon
+     buttons (delete, share) were sized for mouse precision, not thumbs.
+   - Safe-area padding keeps the input bar clear of the home-indicator
+     area on notched phones instead of sitting flush against it.
+*/
+@media (max-width: 768px) {
+  .vault-input { font-size: 16px; }
+
+  .send-btn { width: 46px; height: 46px; }
+
+  .action-btn { padding: 9px 12px; font-size: 11px; }
+
+  .doc-item { padding: 10px 12px; }
+
+  .mode-tab { padding: 7px 12px; font-size: 11px; }
+
+  .toast {
+    left: 16px; right: 16px; transform: none;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    white-space: normal; text-align: center;
+  }
+}
+
+/* Any element carrying this class gets a comfortable minimum tap target
+   on touch screens regardless of its visual (icon-sized) footprint --
+   the visible icon stays small, the tappable area doesn't. */
+@media (hover: none) and (pointer: coarse) {
+  .tap-target {
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+@media (min-width: 768px){
+
+  .md\:relative{
+    position: relative;
+  }
+
+  .md\:z-auto{
+    z-index: auto;
+  }
+
+  .md\:flex{
+    display: flex;
+  }
+
+  .md\:hidden{
+    display: none;
+  }
+
+  .md\:translate-x-0{
+    --tw-translate-x: 0px;
+    transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+  }
+
+  .md\:px-6{
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
