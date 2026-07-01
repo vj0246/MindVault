@@ -103,14 +103,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 
 /* ── Sidebar (the Index) ────────────────────────────────────────────── */
 .sidebar {
-  width: 280px;
-  min-width: 280px;
   background: var(--surface);
   border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+}
+.sidebar:hover > div[title="Drag to resize"],
+.sidebar > div[title="Drag to resize"]:hover {
+  background: var(--accent);
+  opacity: 0.35;
 }
 
 .logo-mark {

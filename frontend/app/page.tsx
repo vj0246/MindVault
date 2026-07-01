@@ -238,21 +238,54 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences, onOpenMemory }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, width, onWidthChange, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences, onOpenMemory }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onExportPDF: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
+  width: number; onWidthChange: (w: number) => void
   selectedDocs: string[]; onToggleDoc: (id: string) => void
   sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
   onShare: (id: string) => void; sharingId: string | null; onEditPreferences: () => void; onOpenMemory: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
+  const [resizing, setResizing] = useState(false)
+  const resizingRef = useRef(false)
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return
+      onWidthChange(Math.min(420, Math.max(220, e.clientX)))
+    }
+    const onUp = () => {
+      if (!resizingRef.current) return
+      resizingRef.current = false
+      setResizing(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+  }, [onWidthChange])
+
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault()
+    resizingRef.current = true
+    setResizing(true)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
 
   return (
     <>
-      <aside className={`sidebar fixed z-50 transition-transform duration-200 pointer-events-auto
-        ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className="sidebar" style={{
+        position: 'relative', flexShrink: 0, height: '100vh',
+        width: open ? width : 0, minWidth: open ? width : 0,
+        transition: resizing ? 'none' : 'width 0.18s var(--ease), min-width 0.18s var(--ease)',
+        overflow: 'hidden',
+      }}>
+        <div style={{ width, height: '100%', display: 'flex', flexDirection: 'column' }}>
         <div className="flex items-center justify-between gap-3 p-5 pb-4">
           <div className="flex items-center gap-3">
             <div className="logo-mark">M</div>
@@ -365,6 +398,12 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             <button className="action-btn danger" onClick={onClearSession}>✕ Clear History</button>
           </div>
         </div>
+        </div>
+        <div
+          onMouseDown={startResize}
+          title="Drag to resize"
+          style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 10 }}
+        />
       </aside>
     </>
   )
@@ -578,7 +617,8 @@ export default function Home() {
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [graphTopic, setGraphTopic] = useState('')
   const [graphLoading, setGraphLoading] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(280)
   const [selectedDocs, setSelectedDocs] = useState<string[]>([])
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [userId, setUserId] = useState<string>('')
@@ -595,6 +635,16 @@ export default function Home() {
   const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
   const [showMemory, setShowMemory] = useState(false)
   const [memoryNotes, setMemoryNotes] = useState<MemoryNote[]>([])
+
+  useEffect(() => {
+    const w = localStorage.getItem('mv_sidebar_width')
+    if (w) setSidebarWidth(Math.min(420, Math.max(220, Number(w))))
+    const o = localStorage.getItem('mv_sidebar_open')
+    if (o !== null) setSidebarOpen(o === '1')
+  }, [])
+
+  useEffect(() => { localStorage.setItem('mv_sidebar_width', String(sidebarWidth)) }, [sidebarWidth])
+  useEffect(() => { localStorage.setItem('mv_sidebar_open', sidebarOpen ? '1' : '0') }, [sidebarOpen])
 
   useEffect(() => {
     getSupabase().auth.getSession().then(({ data: { session } }) => {
@@ -925,6 +975,7 @@ export default function Home() {
         sessionId={sessionId} msgCount={messages.length}
         onExport={handleExport} onExportPDF={handleExportPDF} onNewSession={handleNewSession} onClearSession={handleClearSession}
         open={sidebarOpen} onClose={() => setSidebarOpen(false)}
+        width={sidebarWidth} onWidthChange={setSidebarWidth}
         selectedDocs={selectedDocs} onToggleDoc={handleToggleDoc}
         sessions={sessions} onSelectSession={handleSelectSession} onDeleteSession={handleDeleteSession}
         onShare={handleShare} sharingId={sharingId}
