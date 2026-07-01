@@ -77,6 +77,102 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── Ambient vault aura ─────────────────────────────────────────────────
+   Three slow-drifting blurred orbs in the accent colors, fixed behind the
+   whole app -- the "vault breathes" instead of sitting on a flat page.
+   Opacity is deliberately low; this is atmosphere, not a hero graphic. */
+.aura-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.aura-bg span {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.16;
+  will-change: transform;
+}
+.aura-bg span:nth-child(1) {
+  width: 46vw; height: 46vw; left: -12vw; top: -16vw;
+  background: var(--accent);
+  animation: auraDrift1 26s ease-in-out infinite;
+}
+.aura-bg span:nth-child(2) {
+  width: 38vw; height: 38vw; right: -10vw; top: 20vh;
+  background: var(--accent3);
+  animation: auraDrift2 32s ease-in-out infinite;
+}
+.aura-bg span:nth-child(3) {
+  width: 34vw; height: 34vw; left: 20vw; bottom: -18vw;
+  background: var(--accent2);
+  animation: auraDrift3 29s ease-in-out infinite;
+}
+[data-theme="dark"] .aura-bg span { opacity: 0.22; }
+
+@keyframes auraDrift1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6vw, 5vh) scale(1.12); }
+}
+@keyframes auraDrift2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-5vw, 6vh) scale(1.08); }
+}
+@keyframes auraDrift3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(4vw, -4vh) scale(1.1); }
+}
+
+/* Everything else needs to sit above the aura layer. */
+.sidebar, main { position: relative; z-index: 1; }
+
+/* Subtle 3D tilt for tangible, "physical document" feel on hover --
+   perspective lives on the item itself so it doesn't require a shared
+   ancestor transform context. */
+.tilt-card {
+  transform-style: preserve-3d;
+  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+}
+.tilt-card:hover {
+  transform: perspective(700px) rotateX(2deg) rotateY(-2deg) translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Gradient text for the hero headline -- a slow-moving sheen across the
+   serif italic, not a static fill. */
+.gradient-text {
+  background: linear-gradient(100deg, var(--text) 30%, var(--accent) 50%, var(--text) 70%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sheen 7s ease-in-out infinite;
+}
+@keyframes sheen {
+  0%, 100% { background-position: 0% 0%; }
+  50% { background-position: 100% 0%; }
+}
+
+/* Logo halo -- a breathing glow behind the mark, like a status light on
+   the vault itself. */
+.logo-mark { position: relative; }
+.logo-mark::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+  opacity: 0.35;
+  z-index: -1;
+  animation: halo 3.2s ease-in-out infinite;
+}
+@keyframes halo {
+  0%, 100% { transform: scale(0.9); opacity: 0.25; }
+  50% { transform: scale(1.15); opacity: 0.45; }
+}
+
 button, input, textarea { font-family: inherit; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -513,9 +609,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   transform: scale(0.97);
 }
 
+/* Glass surfaces -- sidebar/composer/panels get a translucent, blurred
+   backdrop so the ambient aura reads through faintly instead of being
+   hidden behind flat opaque panels. Placed after their base rules so it
+   wins the cascade at equal specificity without needing !important. */
+.sidebar, .composer-card, .panel-block {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .fade-up, .dot, .status-dot, .spinner, .toast { animation: none !important; }
+  .fade-up, .dot, .status-dot, .spinner, .toast,
+  .aura-bg span, .gradient-text, .logo-mark::before { animation: none !important; }
   * { transition: none !important; }
+  .tilt-card:hover { transform: none; }
 }
 
 /* ── Mobile ─────────────────────────────────────────────────────────── */
