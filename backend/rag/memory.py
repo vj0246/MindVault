@@ -164,30 +164,73 @@ def revoke_share_token(session_id: str, user_id: str):
     supabase.table("chat_sessions")        .update({"share_token": None, "is_public": False})        .eq("id", session_id)        .eq("user_id", user_id)        .execute()
 
 # ─────────────────────────────────────────────────────────────
-# User preferences (onboarding profile -- injected into every
-# answer's system prompt so responses match the user's stated
-# tone/depth/format instead of a one-size-fits-all default).
+# User preferences (onboarding profile -- name/tone/priorities/
+# custom system prompt injected into every answer so responses
+# match the user's stated style instead of a one-size-fits-all
+# default. Theme is UI-only but stored here so it persists across
+# devices instead of just localStorage.)
 # ─────────────────────────────────────────────────────────────
 
 def get_user_preferences(user_id: str) -> dict | None:
     supabase = get_supabase()
     result = (
         supabase.table("user_preferences")
-        .select("tone, depth, format")
+        .select("name, tone, priorities, system_prompt, theme")
         .eq("user_id", user_id)
         .limit(1)
         .execute()
     )
-    return result.data[0] if result.data else None
+    if not result.data:
+        return None
+    row = result.data[0]
+    row["priorities"] = row["priorities"].split(",") if row.get("priorities") else []
+    return row
 
-def save_user_preferences(user_id: str, tone: str, depth: str, format: str) -> dict:
+def save_user_preferences(user_id: str, name: str, tone: str, priorities: list, system_prompt: str, theme: str) -> dict:
     supabase = get_supabase()
     row = {
         "user_id": user_id,
+        "name": name,
         "tone": tone,
-        "depth": depth,
-        "format": format,
+        "priorities": ",".join(priorities),
+        "system_prompt": system_prompt,
+        "theme": theme,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     supabase.table("user_preferences").upsert(row, on_conflict="user_id").execute()
+    row["priorities"] = priorities
     return row
+
+# ─────────────────────────────────────────────────────────────
+# Long-term memory -- manual notes the user adds themselves
+# (e.g. "studying for the bar exam", "prefers Python examples").
+# No auto-extraction -- user controls exactly what's remembered.
+# ─────────────────────────────────────────────────────────────
+
+def list_memory_notes(user_id: str) -> list:
+    supabase = get_supabase()
+    result = (
+        supabase.table("user_memory_notes")
+        .select("id, content, created_at")
+        .eq("user_id", user_id)
+        .order("created_at")
+        .execute()
+    )
+    return result.data or []
+
+def add_memory_note(user_id: str, content: str) -> dict:
+    supabase = get_supabase()
+    row = {
+        "user_id": user_id,
+        "content": content[:500],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = supabase.table("user_memory_notes").insert(row).execute()
+    return result.data[0]
+
+def delete_memory_note(note_id: str, user_id: str):
+    supabase = get_supabase()
+    supabase.table("user_memory_notes").delete()\
+        .eq("id", note_id)\
+        .eq("user_id", user_id)\
+        .execute()

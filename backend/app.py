@@ -12,7 +12,8 @@ from rag.memory import (
     get_session_history, save_session_message, clear_session_messages,
     list_chat_sessions, create_chat_session, rename_chat_session, delete_chat_session,
     generate_share_token, get_shared_session, revoke_share_token,
-    get_user_preferences, save_user_preferences
+    get_user_preferences, save_user_preferences,
+    list_memory_notes, add_memory_note, delete_memory_note
 )
 from metadata.tracker import log_document, get_all_documents
 from graph.extractor import extract_entities_and_relations
@@ -132,9 +133,14 @@ class RenameRequest(BaseModel):
     name: str
 
 class PreferencesRequest(BaseModel):
+    name: str
     tone: str
-    depth: str
-    format: str
+    priorities: list[str]
+    system_prompt: str
+    theme: str
+
+class MemoryNoteRequest(BaseModel):
+    content: str
 
 class QueryRequest(BaseModel):
     question: str
@@ -519,7 +525,22 @@ def get_preferences_route(user=Depends(get_current_user)):
 
 @app.post("/preferences")
 def save_preferences_route(body: PreferencesRequest, user=Depends(get_current_user)):
-    return save_user_preferences(str(user.id), body.tone, body.depth, body.format)
+    return save_user_preferences(str(user.id), body.name, body.tone, body.priorities, body.system_prompt, body.theme)
+
+@app.get("/memory")
+def list_memory_route(user=Depends(get_current_user)):
+    return {"notes": list_memory_notes(str(user.id))}
+
+@app.post("/memory")
+def add_memory_route(body: MemoryNoteRequest, user=Depends(get_current_user)):
+    if not body.content.strip():
+        raise HTTPException(status_code=400, detail="Note cannot be empty.")
+    return add_memory_note(str(user.id), body.content.strip())
+
+@app.delete("/memory/{note_id}")
+def delete_memory_route(note_id: str, user=Depends(get_current_user)):
+    delete_memory_note(note_id, str(user.id))
+    return {"ok": True}
 
 @app.post("/sessions/{session_id}/share")
 def share_session(session_id: str, user=Depends(get_current_user)):

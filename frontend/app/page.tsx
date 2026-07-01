@@ -24,6 +24,10 @@ import {
   getSessionHistory,
   getPreferences,
   savePreferences,
+  listMemoryNotes,
+  addMemoryNote,
+  deleteMemoryNote,
+  type Preferences,
 } from '../lib/api'
 
 type Mode = 'student' | 'lawyer' | 'developer' | 'default'
@@ -46,6 +50,18 @@ interface Doc {
   filename: string
   chunk_count: number
   uploaded_at: string
+}
+
+type PreferencesState = Preferences
+
+const DEFAULT_PREFERENCES: PreferencesState = {
+  name: '', tone: 'Neutral', priorities: [], system_prompt: '', theme: 'Light',
+}
+
+interface MemoryNote {
+  id: string
+  content: string
+  created_at: string
 }
 
 interface ChatSession {
@@ -222,13 +238,13 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences, onOpenMemory }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onExportPDF: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
   selectedDocs: string[]; onToggleDoc: (id: string) => void
   sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
-  onShare: (id: string) => void; sharingId: string | null; onEditPreferences: () => void
+  onShare: (id: string) => void; sharingId: string | null; onEditPreferences: () => void; onOpenMemory: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -343,7 +359,10 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
               <button className="action-btn" style={{ flex: 1 }} onClick={onExportPDF}>↓ PDF</button>
             </div>
             <button className="action-btn" onClick={onNewSession}>+ New Session</button>
-            <button className="action-btn" onClick={onEditPreferences}>⚙ Preferences</button>
+            <div className="flex gap-2">
+              <button className="action-btn" style={{ flex: 1 }} onClick={onEditPreferences}>⚙ Preferences</button>
+              <button className="action-btn" style={{ flex: 1 }} onClick={onOpenMemory}>◆ Memory</button>
+            </div>
             <button className="action-btn danger" onClick={onClearSession}>✕ Clear History</button>
           </div>
         </div>
@@ -387,20 +406,27 @@ function EmptyState({ onSuggest, docs }: { onSuggest: (q: string) => void; docs:
 }
 
 const PREF_TONES = ['Friendly', 'Neutral', 'Formal'] as const
-const PREF_DEPTHS = ['Brief', 'Moderate', 'Detailed'] as const
-const PREF_FORMATS = ['Bullet points', 'Prose', 'Mixed'] as const
+const PREF_PRIORITIES = ['Accuracy', 'Conciseness', 'Step-by-step', 'Examples', 'Speed'] as const
+const PREF_THEMES = ['Light', 'Dark'] as const
 
-function PreferencesModal({ onSave, onClose, dismissable }: {
-  onSave: (tone: string, depth: string, format: string) => void
+function PreferencesModal({ initial, onSave, onClose, dismissable }: {
+  initial: PreferencesState
+  onSave: (prefs: PreferencesState) => void
   onClose: () => void
   dismissable: boolean
 }) {
-  const [tone, setTone] = useState<string>(PREF_TONES[1])
-  const [depth, setDepth] = useState<string>(PREF_DEPTHS[1])
-  const [format, setFormat] = useState<string>(PREF_FORMATS[1])
+  const [name, setName] = useState(initial.name)
+  const [tone, setTone] = useState(initial.tone)
+  const [priorities, setPriorities] = useState<string[]>(initial.priorities)
+  const [systemPrompt, setSystemPrompt] = useState(initial.system_prompt)
+  const [theme, setTheme] = useState(initial.theme)
+
+  const togglePriority = (opt: string) => {
+    setPriorities(prev => prev.includes(opt) ? prev.filter(p => p !== opt) : [...prev, opt])
+  }
 
   const Picker = ({ label, options, value, onPick }: { label: string; options: readonly string[]; value: string; onPick: (v: string) => void }) => (
-    <div style={{ marginBottom: 18 }}>
+    <div style={{ marginBottom: 16 }}>
       <p className="eyebrow" style={{ marginBottom: 8 }}>{label}</p>
       <div className="flex gap-2 flex-wrap">
         {options.map(opt => (
@@ -421,7 +447,7 @@ function PreferencesModal({ onSave, onClose, dismissable }: {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(23,26,36,0.45)' }}>
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
-        boxShadow: 'var(--shadow-lift)', padding: 28, width: '100%', maxWidth: 420,
+        boxShadow: 'var(--shadow-lift)', padding: 28, width: '100%', maxWidth: 460, maxHeight: '85vh', overflowY: 'auto',
       }}>
         <p style={{ fontFamily: 'var(--serif)', fontSize: 22, fontStyle: 'italic', color: 'var(--text)', marginBottom: 4 }}>
           How should MindVault talk to you?
@@ -429,16 +455,101 @@ function PreferencesModal({ onSave, onClose, dismissable }: {
         <p style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 20 }}>
           Sets a default style for answers — change it anytime from Preferences.
         </p>
-        <Picker label="Tone" options={PREF_TONES} value={tone} onPick={setTone} />
-        <Picker label="Depth" options={PREF_DEPTHS} value={depth} onPick={setDepth} />
-        <Picker label="Format" options={PREF_FORMATS} value={format} onPick={setFormat} />
+
+        <div style={{ marginBottom: 16 }}>
+          <p className="eyebrow" style={{ marginBottom: 8 }}>Your name</p>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="What should we call you?"
+            style={{
+              width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)',
+              padding: '8px 10px', fontSize: 13, color: 'var(--text)',
+            }} />
+        </div>
+
+        <Picker label="Style" options={PREF_TONES} value={tone} onPick={setTone} />
+
+        <div style={{ marginBottom: 16 }}>
+          <p className="eyebrow" style={{ marginBottom: 8 }}>Priorities (pick any)</p>
+          <div className="flex gap-2 flex-wrap">
+            {PREF_PRIORITIES.map(opt => (
+              <button key={opt} type="button" onClick={() => togglePriority(opt)}
+                className="segmented-item" style={{
+                  border: '1px solid var(--border)',
+                  background: priorities.includes(opt) ? 'var(--surface)' : 'transparent',
+                  color: priorities.includes(opt) ? 'var(--accent)' : 'var(--text3)',
+                  boxShadow: priorities.includes(opt) ? 'var(--shadow-sm)' : 'none',
+                  padding: '6px 14px',
+                }}>{opt}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <p className="eyebrow" style={{ marginBottom: 8 }}>Custom instructions (optional)</p>
+          <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)}
+            placeholder="e.g. I'm prepping for the bar exam — flag anything that's commonly tested."
+            rows={3}
+            style={{
+              width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)',
+              padding: '8px 10px', fontSize: 13, color: 'var(--text)', resize: 'vertical', fontFamily: 'var(--sans)',
+            }} />
+        </div>
+
+        <Picker label="Theme" options={PREF_THEMES} value={theme} onPick={setTheme} />
+
         <div className="flex gap-2" style={{ marginTop: 8 }}>
           {dismissable && (
             <button className="action-btn" style={{ flex: 1 }} onClick={onClose}>Skip</button>
           )}
           <button className="send-btn" style={{ flex: 1, width: 'auto', borderRadius: 'var(--r-sm)', fontSize: 13, fontWeight: 500 }}
-            onClick={() => onSave(tone, depth, format)}>Save</button>
+            onClick={() => onSave({ name, tone, priorities, system_prompt: systemPrompt, theme })}>Save</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function MemoryModal({ notes, onAdd, onDelete, onClose }: {
+  notes: { id: string; content: string }[]
+  onAdd: (content: string) => void
+  onDelete: (id: string) => void
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState('')
+  const submit = () => { if (draft.trim()) { onAdd(draft.trim()); setDraft('') } }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(23,26,36,0.45)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
+        boxShadow: 'var(--shadow-lift)', padding: 28, width: '100%', maxWidth: 460, maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+      }}>
+        <p style={{ fontFamily: 'var(--serif)', fontSize: 22, fontStyle: 'italic', color: 'var(--text)', marginBottom: 4 }}>Long-term memory</p>
+        <p style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 16 }}>
+          Facts you add here are remembered across every session and chat.
+        </p>
+
+        <div className="flex gap-2" style={{ marginBottom: 14 }}>
+          <input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit() }}
+            placeholder="e.g. I'm studying for the CFA exam"
+            style={{
+              flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)',
+              padding: '8px 10px', fontSize: 13, color: 'var(--text)',
+            }} />
+          <button className="action-btn" style={{ width: 'auto', padding: '0 16px' }} onClick={submit}>Add</button>
+        </div>
+
+        <div className="flex flex-col gap-1.5" style={{ overflowY: 'auto', flex: 1 }}>
+          {notes.length === 0 && <p style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: '16px 0' }}>No memory notes yet.</p>}
+          {notes.map(n => (
+            <div key={n.id} className="doc-item" style={{ cursor: 'default' }}>
+              <p style={{ fontSize: 12.5, color: 'var(--text)', flex: 1 }}>{n.content}</p>
+              <button onClick={() => onDelete(n.id)} className="tap-target"
+                style={{ fontSize: 12, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+            </div>
+          ))}
+        </div>
+
+        <button className="action-btn" style={{ marginTop: 14 }} onClick={onClose}>Close</button>
       </div>
     </div>
   )
@@ -472,6 +583,9 @@ export default function Home() {
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingRequired, setOnboardingRequired] = useState(false)
+  const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
+  const [showMemory, setShowMemory] = useState(false)
+  const [memoryNotes, setMemoryNotes] = useState<MemoryNote[]>([])
 
   useEffect(() => {
     getSupabase().auth.getSession().then(({ data: { session } }) => {
@@ -488,14 +602,40 @@ export default function Home() {
         })
       }
       loadSessions()
-      getPreferences().then(r => { if (!r.preferences) { setOnboardingRequired(true); setShowOnboarding(true) } }).catch(() => {})
+      getPreferences().then(r => {
+        if (r.preferences) {
+          setPreferences({ ...DEFAULT_PREFERENCES, ...r.preferences })
+        } else {
+          setOnboardingRequired(true); setShowOnboarding(true)
+        }
+      }).catch(() => {})
     })
     loadDocs()
   }, [])
 
-  const handleSavePreferences = async (tone: string, depth: string, format: string) => {
-    await savePreferences(tone, depth, format)
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', preferences.theme.toLowerCase())
+  }, [preferences.theme])
+
+  const handleSavePreferences = async (prefs: PreferencesState) => {
+    await savePreferences(prefs)
+    setPreferences(prefs)
     setShowOnboarding(false)
+  }
+
+  const openMemory = () => {
+    listMemoryNotes().then(r => setMemoryNotes(r.notes || [])).catch(() => {})
+    setShowMemory(true)
+  }
+
+  const handleAddMemoryNote = async (content: string) => {
+    const note = await addMemoryNote(content)
+    setMemoryNotes(prev => [...prev, note])
+  }
+
+  const handleDeleteMemoryNote = async (id: string) => {
+    setMemoryNotes(prev => prev.filter(n => n.id !== id))
+    await deleteMemoryNote(id)
   }
 
   // Streaming appends a token to `messages` on every chunk, which used to
@@ -779,13 +919,24 @@ export default function Home() {
         sessions={sessions} onSelectSession={handleSelectSession} onDeleteSession={handleDeleteSession}
         onShare={handleShare} sharingId={sharingId}
         onEditPreferences={() => { setOnboardingRequired(false); setShowOnboarding(true) }}
+        onOpenMemory={openMemory}
       />
 
       {showOnboarding && (
         <PreferencesModal
+          initial={preferences}
           dismissable={!onboardingRequired}
           onClose={() => setShowOnboarding(false)}
           onSave={handleSavePreferences}
+        />
+      )}
+
+      {showMemory && (
+        <MemoryModal
+          notes={memoryNotes}
+          onAdd={handleAddMemoryNote}
+          onDelete={handleDeleteMemoryNote}
+          onClose={() => setShowMemory(false)}
         />
       )}
 

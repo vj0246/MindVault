@@ -136,13 +136,36 @@ export async function getSharedSession(token: string) {
   return res.data  // { name, created_at, messages }
 }
 
-export async function getPreferences() {
-  const res = await api.get('/preferences')
-  return res.data  // { preferences: { tone, depth, format } | null }
+export interface Preferences {
+  name: string
+  tone: string
+  priorities: string[]
+  system_prompt: string
+  theme: string
 }
 
-export async function savePreferences(tone: string, depth: string, format: string) {
-  const res = await api.post('/preferences', { tone, depth, format })
+export async function getPreferences() {
+  const res = await api.get('/preferences')
+  return res.data  // { preferences: Preferences | null }
+}
+
+export async function savePreferences(prefs: Preferences) {
+  const res = await api.post('/preferences', prefs)
+  return res.data
+}
+
+export async function listMemoryNotes() {
+  const res = await api.get('/memory')
+  return res.data  // { notes: { id, content, created_at }[] }
+}
+
+export async function addMemoryNote(content: string) {
+  const res = await api.post('/memory', { content })
+  return res.data
+}
+
+export async function deleteMemoryNote(noteId: string) {
+  const res = await api.delete(`/memory/${noteId}`)
   return res.data
 }
 
