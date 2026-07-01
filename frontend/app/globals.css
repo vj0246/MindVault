@@ -3,9 +3,7 @@
 @tailwind utilities;
 
 /* ── Tokens ──────────────────────────────────────────────────────────────
-   "Ledger" direction: MindVault as a bound record of retrieved knowledge.
-   Paper base, ink text, three accents borrowed from wax-seal/ink-stamp
-   colors (gold, terracotta, teal) used sparingly as signal, not decoration.
+   Cool neutral base, indigo/teal/amber accents used sparingly as signal.
    Font vars come from next/font (app/layout.tsx) — no blocking @import. */
 :root {
   --font-serif: 'Instrument Serif', serif;
@@ -15,26 +13,28 @@
   --mono: var(--font-mono);
   --sans: var(--font-sans);
 
-  --bg: #f7f4ee;
+  --bg: #f8f9fc;
   --surface: #ffffff;
-  --surface2: #efe9db;
-  --surface3: #e3dcc7;
-  --text: #201d17;
-  --text2: #5d5749;
-  --text3: #928a77;
-  --border: #e2ddce;
-  --border2: #cfc6ac;
+  --surface2: #eef1f6;
+  --surface3: #e2e7ef;
+  --text: #171a24;
+  --text2: #4c5265;
+  --text3: #8991a5;
+  --border: #e5e8f0;
+  --border2: #d3d8e4;
 
-  --accent: #a9782a;
-  --accent2: #a85a3d;
-  --accent3: #3d7f68;
-  --danger: #b23b2f;
-  --glow: rgba(169, 120, 42, 0.12);
-  --focus-ring: rgba(169, 120, 42, 0.35);
+  --accent: #4f46e5;
+  --accent2: #d0870f;
+  --accent3: #0f9d78;
+  --danger: #dc3545;
+  --glow: rgba(79, 70, 229, 0.10);
+  --focus-ring: rgba(79, 70, 229, 0.35);
 
-  --shadow-sm: 0 1px 2px rgba(32, 29, 23, 0.05), 0 1px 1px rgba(32, 29, 23, 0.04);
-  --shadow-md: 0 8px 24px -8px rgba(32, 29, 23, 0.16), 0 2px 6px rgba(32, 29, 23, 0.06);
-  --shadow-lift: 0 12px 32px -12px rgba(32, 29, 23, 0.22);
+  --shadow-sm: 0 1px 2px rgba(23, 26, 36, 0.05), 0 1px 1px rgba(23, 26, 36, 0.04);
+  --shadow-md: 0 8px 24px -8px rgba(23, 26, 36, 0.14), 0 2px 6px rgba(23, 26, 36, 0.05);
+  --shadow-lift: 0 12px 32px -12px rgba(23, 26, 36, 0.20);
+
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
 
   --r-sm: 6px;
   --r-md: 10px;
@@ -114,7 +114,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   padding: 16px;
   text-align: center;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.2s var(--ease), background-color 0.2s var(--ease);
   position: relative;
   overflow: hidden;
 }
@@ -129,11 +129,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   padding: 8px 10px;
   border-radius: var(--r-sm);
   cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease;
+  transition: background-color 0.18s var(--ease), border-color 0.18s var(--ease);
   border: 1px solid transparent;
 }
 .doc-item:hover { background: var(--surface2); border-color: var(--border); }
-.doc-item.active { background: rgba(169, 120, 42, 0.08); border-color: rgba(169, 120, 42, 0.25); }
+.doc-item.active { background: rgba(79, 70, 229, 0.08); border-color: rgba(79, 70, 229, 0.25); }
 
 /* Ledger row (chat sessions) — numbered like index entries */
 .ledger-row {
@@ -144,10 +144,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   border-radius: var(--r-sm);
   cursor: pointer;
   border: 1px solid transparent;
-  transition: background-color 0.12s ease, border-color 0.12s ease;
+  transition: background-color 0.18s var(--ease), border-color 0.18s var(--ease);
 }
 .ledger-row:hover { background: var(--surface2); }
-.ledger-row.active { background: rgba(169, 120, 42, 0.09); border-color: rgba(169, 120, 42, 0.22); }
+.ledger-row.active { background: rgba(79, 70, 229, 0.09); border-color: rgba(79, 70, 229, 0.22); }
 .ledger-tick {
   font-family: var(--mono);
   font-size: 9px;
@@ -177,7 +177,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   cursor: pointer;
   border: none;
   background: transparent;
-  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color 0.2s var(--ease), color 0.2s var(--ease), box-shadow 0.2s var(--ease);
   white-space: nowrap;
 }
 .segmented-item:hover { color: var(--text2); }
@@ -195,12 +195,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   border-radius: 999px;
   color: var(--accent3);
   cursor: pointer;
-  border: 1px solid rgba(61, 127, 104, 0.3);
-  background: rgba(61, 127, 104, 0.06);
-  transition: background-color 0.15s ease;
+  border: 1px solid rgba(15, 157, 120, 0.3);
+  background: rgba(15, 157, 120, 0.06);
+  transition: background-color 0.2s var(--ease);
   white-space: nowrap;
 }
-.graph-btn:hover { background: rgba(61, 127, 104, 0.13); }
+.graph-btn:hover { background: rgba(15, 157, 120, 0.13); }
 
 /* ── Messages ───────────────────────────────────────────────────────── */
 .msg-user {
@@ -215,7 +215,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 /* Assistant messages read like a ledger margin note: a quiet accent spine
    instead of a repeated avatar circle on every turn — calmer at length. */
 .msg-ai-spine {
-  border-left: 2px solid rgba(169, 120, 42, 0.35);
+  border-left: 2px solid rgba(79, 70, 229, 0.35);
   padding-left: 16px;
 }
 
@@ -238,9 +238,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   padding: 2px 7px;
   border-radius: 4px;
 }
-.intent-answer     { background: rgba(61, 127, 104, 0.12);  color: var(--accent3); border: 1px solid rgba(61, 127, 104, 0.25); }
-.intent-compare    { background: rgba(168, 90, 61, 0.12);   color: var(--accent2); border: 1px solid rgba(168, 90, 61, 0.25); }
-.intent-test       { background: rgba(169, 120, 42, 0.10);  color: var(--accent);  border: 1px solid rgba(169, 120, 42, 0.25); }
+.intent-answer     { background: rgba(15, 157, 120, 0.12);  color: var(--accent3); border: 1px solid rgba(15, 157, 120, 0.25); }
+.intent-compare    { background: rgba(208, 135, 15, 0.12);   color: var(--accent2); border: 1px solid rgba(208, 135, 15, 0.25); }
+.intent-test       { background: rgba(79, 70, 229, 0.10);  color: var(--accent);  border: 1px solid rgba(79, 70, 229, 0.25); }
 .intent-summarize  { background: rgba(139, 105, 168, 0.10); color: #8b69a8;        border: 1px solid rgba(139, 105, 168, 0.25); }
 
 .source-chip {
@@ -259,13 +259,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   font-size: 10px;
   padding: 3px 9px;
   border-radius: var(--r-sm);
-  background: rgba(61, 127, 104, 0.08);
-  border: 1px solid rgba(61, 127, 104, 0.22);
+  background: rgba(15, 157, 120, 0.08);
+  border: 1px solid rgba(15, 157, 120, 0.22);
   color: var(--accent3);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
 }
-.concept-tag:hover { background: rgba(61, 127, 104, 0.16); border-color: rgba(61, 127, 104, 0.4); }
+.concept-tag:hover { background: rgba(15, 157, 120, 0.16); border-color: rgba(15, 157, 120, 0.4); }
 
 /* ── Composer ───────────────────────────────────────────────────────── */
 .composer-wrap {
@@ -281,7 +281,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   max-width: 760px;
   margin: 0 auto;
 }
-.composer-card:focus-within { border-color: rgba(169, 120, 42, 0.4); }
+.composer-card:focus-within { border-color: rgba(79, 70, 229, 0.4); }
 
 .vault-input {
   background: transparent;
@@ -309,7 +309,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.2s var(--ease);
 }
 .icon-btn:hover:not(:disabled) { background: var(--surface2); }
 .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -324,12 +324,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color 0.15s ease, transform 0.1s ease;
+  transition: background-color 0.2s var(--ease), transform 0.16s var(--ease);
   flex-shrink: 0;
   font-size: 16px;
   font-weight: 600;
 }
-.send-btn:hover:not(:disabled) { background: #bb8b37; }
+.send-btn:hover:not(:disabled) { background: #4338ca; }
 .send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* ── Typing / status ────────────────────────────────────────────────── */
@@ -381,11 +381,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   border-radius: var(--r-md);
   padding: 13px 15px;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+  transition: border-color 0.2s var(--ease), background-color 0.2s var(--ease), transform 0.16s var(--ease);
   background: var(--surface);
   text-align: left;
 }
-.suggestion:hover { border-color: rgba(169, 120, 42, 0.35); background: var(--glow); transform: translateY(-1px); }
+.suggestion:hover { border-color: rgba(79, 70, 229, 0.35); background: var(--glow); transform: translateY(-1px); }
 
 /* ── Motion ─────────────────────────────────────────────────────────── */
 @keyframes fadeUp {
@@ -406,13 +406,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   border: 1px solid var(--border2);
   color: var(--text3);
   cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: background-color 0.18s var(--ease), color 0.18s var(--ease), border-color 0.18s var(--ease);
   background: transparent;
   width: 100%;
   text-align: center;
 }
 .action-btn:hover { color: var(--text2); background: var(--surface2); }
-.action-btn.danger:hover { color: var(--danger); border-color: rgba(178, 59, 47, 0.35); }
+.action-btn.danger:hover { color: var(--danger); border-color: rgba(220, 53, 69, 0.35); }
 
 .spinner {
   width: 16px;

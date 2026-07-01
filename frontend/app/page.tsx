@@ -117,7 +117,7 @@ function IntentPill({ intent }: { intent: string }) {
 
 function ConfidenceBadge({ score }: { score: number }) {
   const pct = Math.round(score * 100)
-  const color = score >= 0.7 ? '#3d7f68' : score >= 0.4 ? '#a9782a' : '#b23b2f'
+  const color = score >= 0.7 ? '#0f9d78' : score >= 0.4 ? '#d0870f' : '#dc3545'
   const label = score >= 0.7 ? 'High' : score >= 0.4 ? 'Medium' : 'Low'
   return (
     <span className="chip" style={{ border: `1px solid ${color}33`, color, background: `${color}11`, marginLeft: 6 }}>
@@ -736,16 +736,6 @@ export default function Home() {
               ))}
             </div>
             <button className="graph-btn" onClick={handleViewFullGraph}>⬡ Graph</button>
-          </div>
-          <div className="hidden md:flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className="status-dot" />
-              <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
-                {docs.length} doc{docs.length !== 1 ? 's' : ''} in vault
-              </span>
-            </div>
-            <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
-            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>Powered by MindVault</span>
           </div>
         </div>
 
