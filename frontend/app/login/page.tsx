@@ -35,20 +35,22 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center h-screen px-4" style={{ background: 'var(--bg)' }}>
-      <div style={{
-        background: 'var(--surface)',
+    <div className="flex items-center justify-center h-screen px-4" style={{ background: 'var(--bg)', position: 'relative', overflow: 'hidden' }}>
+      <div className="aura-bg"><span /><span /><span /></div>
+      <div className="tilt-card panel-block" style={{
         border: '1px solid var(--border)',
         borderRadius: 'var(--r-lg)',
         boxShadow: 'var(--shadow-md)',
         padding: 40,
         width: '100%',
-        maxWidth: 400
+        maxWidth: 400,
+        position: 'relative',
+        zIndex: 1
       }}>
         <div className="flex items-center gap-3 mb-8">
           <div className="logo-mark">M</div>
           <div>
-            <h1 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontStyle: 'italic', color: 'var(--text)' }}>MindVault</h1>
+            <h1 className="gradient-text" style={{ fontFamily: 'var(--serif)', fontSize: 22, fontStyle: 'italic' }}>MindVault</h1>
             <p className="eyebrow" style={{ textTransform: 'none', letterSpacing: 0 }}>knowledge · retrieved</p>
           </div>
         </div>
