@@ -353,23 +353,34 @@ Reply with ONLY one word:
     return router_prompt | llm | StrOutputParser()
 
 def _preference_hint(user_id: str = None) -> str:
-    """One-line instruction built from the user's onboarding preferences
-    (tone/depth/format), so answers match their stated style instead of a
-    single default voice. Empty string if the user never set preferences."""
+    """Instruction block built from the user's onboarding profile (name/tone/
+    priorities/custom system prompt) plus their manually-saved long-term
+    memory notes, so answers match their stated style and known context
+    instead of a single default voice. Empty string if unset."""
     if not user_id:
         return ""
     try:
-        from rag.memory import get_user_preferences
+        from rag.memory import get_user_preferences, list_memory_notes
         prefs = get_user_preferences(user_id)
+        notes = list_memory_notes(user_id)
     except Exception:
         return ""
-    if not prefs:
-        return ""
-    return (
-        f"User preference: respond in a {prefs.get('tone', 'neutral')} tone, "
-        f"at {prefs.get('depth', 'moderate')} depth, "
-        f"formatted as {prefs.get('format', 'prose')}."
-    )
+
+    parts = []
+    if prefs:
+        if prefs.get("name"):
+            parts.append(f"The user's name is {prefs['name']} -- address them naturally when it fits.")
+        if prefs.get("tone"):
+            parts.append(f"Preferred tone: {prefs['tone']}.")
+        if prefs.get("priorities"):
+            parts.append(f"What matters most to the user: {', '.join(prefs['priorities'])}.")
+        if prefs.get("system_prompt"):
+            parts.append(prefs["system_prompt"])
+    if notes:
+        facts = "; ".join(n["content"] for n in notes[:20])
+        parts.append(f"Known long-term facts about the user: {facts}.")
+
+    return " ".join(parts)
 
 def build_retrieval_chain(mode: str = "default", user_id: str = None, document_ids: list = None):
     prompts = {
