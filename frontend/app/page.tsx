@@ -409,9 +409,12 @@ const PREF_TONES = ['Friendly', 'Neutral', 'Formal'] as const
 const PREF_PRIORITIES = ['Accuracy', 'Conciseness', 'Step-by-step', 'Examples', 'Speed'] as const
 const PREF_THEMES = ['Light', 'Dark'] as const
 
-function PreferencesModal({ initial, onSave, onClose, dismissable }: {
+function PreferencesModal({ initial, memoryNotes, onSave, onAddMemoryNote, onDeleteMemoryNote, onClose, dismissable }: {
   initial: PreferencesState
+  memoryNotes: MemoryNote[]
   onSave: (prefs: PreferencesState) => void
+  onAddMemoryNote: (content: string) => void
+  onDeleteMemoryNote: (id: string) => void
   onClose: () => void
   dismissable: boolean
 }) {
@@ -420,81 +423,92 @@ function PreferencesModal({ initial, onSave, onClose, dismissable }: {
   const [priorities, setPriorities] = useState<string[]>(initial.priorities)
   const [systemPrompt, setSystemPrompt] = useState(initial.system_prompt)
   const [theme, setTheme] = useState(initial.theme)
+  const [memoryDraft, setMemoryDraft] = useState('')
 
   const togglePriority = (opt: string) => {
     setPriorities(prev => prev.includes(opt) ? prev.filter(p => p !== opt) : [...prev, opt])
   }
 
-  const Picker = ({ label, options, value, onPick }: { label: string; options: readonly string[]; value: string; onPick: (v: string) => void }) => (
-    <div style={{ marginBottom: 16 }}>
-      <p className="eyebrow" style={{ marginBottom: 8 }}>{label}</p>
-      <div className="flex gap-2 flex-wrap">
-        {options.map(opt => (
-          <button key={opt} type="button" onClick={() => onPick(opt)}
-            className="segmented-item" style={{
-              border: '1px solid var(--border)',
-              background: value === opt ? 'var(--surface)' : 'transparent',
-              color: value === opt ? 'var(--accent)' : 'var(--text3)',
-              boxShadow: value === opt ? 'var(--shadow-sm)' : 'none',
-              padding: '6px 14px',
-            }}>{opt}</button>
-        ))}
-      </div>
+  const submitMemory = () => {
+    if (memoryDraft.trim()) { onAddMemoryNote(memoryDraft.trim()); setMemoryDraft('') }
+  }
+
+  const Section = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
+    <div style={{ marginBottom: 20 }}>
+      <p className="eyebrow" style={{ marginBottom: 8, fontSize: 10.5 }}>{label}</p>
+      {hint && <p style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 8, marginTop: -4 }}>{hint}</p>}
+      {children}
+    </div>
+  )
+
+  const Picker = ({ options, value, onPick }: { options: readonly string[]; value: string; onPick: (v: string) => void }) => (
+    <div className="flex gap-2 flex-wrap">
+      {options.map(opt => (
+        <button key={opt} type="button" onClick={() => onPick(opt)}
+          className={`pref-chip ${value === opt ? 'active' : ''}`}>{opt}</button>
+      ))}
     </div>
   )
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(23,26,36,0.45)' }}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(23,26,36,0.55)' }}>
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
-        boxShadow: 'var(--shadow-lift)', padding: 28, width: '100%', maxWidth: 460, maxHeight: '85vh', overflowY: 'auto',
+        boxShadow: 'var(--shadow-lift)', padding: 28, width: '100%', maxWidth: 480, maxHeight: '85vh', overflowY: 'auto',
       }}>
-        <p style={{ fontFamily: 'var(--serif)', fontSize: 22, fontStyle: 'italic', color: 'var(--text)', marginBottom: 4 }}>
+        <p style={{ fontFamily: 'var(--serif)', fontSize: 23, fontStyle: 'italic', color: 'var(--text)', marginBottom: 4 }}>
           How should MindVault talk to you?
         </p>
-        <p style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 20 }}>
-          Sets a default style for answers — change it anytime from Preferences.
+        <p style={{ fontSize: 12.5, color: 'var(--text2)', marginBottom: 22, lineHeight: 1.5 }}>
+          A couple of quick picks — change any of this anytime from Preferences in the sidebar.
         </p>
 
-        <div style={{ marginBottom: 16 }}>
-          <p className="eyebrow" style={{ marginBottom: 8 }}>Your name</p>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="What should we call you?"
-            style={{
-              width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)',
-              padding: '8px 10px', fontSize: 13, color: 'var(--text)',
-            }} />
-        </div>
+        <Section label="Your name">
+          <input className="pref-field" value={name} onChange={e => setName(e.target.value)} placeholder="What should we call you?" />
+        </Section>
 
-        <Picker label="Style" options={PREF_TONES} value={tone} onPick={setTone} />
+        <Section label="Style">
+          <Picker options={PREF_TONES} value={tone} onPick={setTone} />
+        </Section>
 
-        <div style={{ marginBottom: 16 }}>
-          <p className="eyebrow" style={{ marginBottom: 8 }}>Priorities (pick any)</p>
+        <Section label="Priorities" hint="Pick any that matter to you">
           <div className="flex gap-2 flex-wrap">
             {PREF_PRIORITIES.map(opt => (
               <button key={opt} type="button" onClick={() => togglePriority(opt)}
-                className="segmented-item" style={{
-                  border: '1px solid var(--border)',
-                  background: priorities.includes(opt) ? 'var(--surface)' : 'transparent',
-                  color: priorities.includes(opt) ? 'var(--accent)' : 'var(--text3)',
-                  boxShadow: priorities.includes(opt) ? 'var(--shadow-sm)' : 'none',
-                  padding: '6px 14px',
-                }}>{opt}</button>
+                className={`pref-chip ${priorities.includes(opt) ? 'active' : ''}`}>{opt}</button>
             ))}
           </div>
-        </div>
+        </Section>
 
-        <div style={{ marginBottom: 16 }}>
-          <p className="eyebrow" style={{ marginBottom: 8 }}>Custom instructions (optional)</p>
-          <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)}
+        <Section label="Custom instructions" hint="Optional — anything else MindVault should know">
+          <textarea className="pref-field" value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)}
             placeholder="e.g. I'm prepping for the bar exam — flag anything that's commonly tested."
-            rows={3}
-            style={{
-              width: '100%', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)',
-              padding: '8px 10px', fontSize: 13, color: 'var(--text)', resize: 'vertical', fontFamily: 'var(--sans)',
-            }} />
-        </div>
+            rows={3} style={{ resize: 'vertical' }} />
+        </Section>
 
-        <Picker label="Theme" options={PREF_THEMES} value={theme} onPick={setTheme} />
+        <Section label="Theme">
+          <Picker options={PREF_THEMES} value={theme} onPick={setTheme} />
+        </Section>
+
+        <Section label="Long-term memory" hint="Facts MindVault remembers across every chat — add as many as you like">
+          <div className="flex gap-2" style={{ marginBottom: 10 }}>
+            <input className="pref-field" value={memoryDraft} onChange={e => setMemoryDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitMemory() } }}
+              placeholder="e.g. I'm studying for the CFA exam" />
+            <button className="action-btn" style={{ width: 'auto', padding: '0 16px', flexShrink: 0 }} onClick={submitMemory}>Add</button>
+          </div>
+          {memoryNotes.length > 0 && (
+            <div className="flex flex-col gap-1.5" style={{ maxHeight: 140, overflowY: 'auto' }}>
+              {memoryNotes.map(n => (
+                <div key={n.id} className="doc-item" style={{ cursor: 'default' }}>
+                  <p style={{ fontSize: 12.5, color: 'var(--text)', flex: 1 }}>{n.content}</p>
+                  <button onClick={() => onDeleteMemoryNote(n.id)} className="tap-target"
+                    style={{ fontSize: 12, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
 
         <div className="flex gap-2" style={{ marginTop: 8 }}>
           {dismissable && (
@@ -529,13 +543,9 @@ function MemoryModal({ notes, onAdd, onDelete, onClose }: {
         </p>
 
         <div className="flex gap-2" style={{ marginBottom: 14 }}>
-          <input value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit() }}
-            placeholder="e.g. I'm studying for the CFA exam"
-            style={{
-              flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)',
-              padding: '8px 10px', fontSize: 13, color: 'var(--text)',
-            }} />
-          <button className="action-btn" style={{ width: 'auto', padding: '0 16px' }} onClick={submit}>Add</button>
+          <input className="pref-field" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit() }}
+            placeholder="e.g. I'm studying for the CFA exam" style={{ flex: 1 }} />
+          <button className="action-btn" style={{ width: 'auto', padding: '0 16px', flexShrink: 0 }} onClick={submit}>Add</button>
         </div>
 
         <div className="flex flex-col gap-1.5" style={{ overflowY: 'auto', flex: 1 }}>
@@ -609,6 +619,7 @@ export default function Home() {
           setOnboardingRequired(true); setShowOnboarding(true)
         }
       }).catch(() => {})
+      listMemoryNotes().then(r => setMemoryNotes(r.notes || [])).catch(() => {})
     })
     loadDocs()
   }, [])
@@ -925,9 +936,12 @@ export default function Home() {
       {showOnboarding && (
         <PreferencesModal
           initial={preferences}
+          memoryNotes={memoryNotes}
           dismissable={!onboardingRequired}
           onClose={() => setShowOnboarding(false)}
           onSave={handleSavePreferences}
+          onAddMemoryNote={handleAddMemoryNote}
+          onDeleteMemoryNote={handleDeleteMemoryNote}
         />
       )}
 
