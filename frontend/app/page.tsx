@@ -337,7 +337,8 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             ) : (
               <div className="flex flex-col gap-1 overflow-y-auto">
                 {docs.map((doc, i) => (
-                  <div key={i} className={`doc-item fade-up ${selectedDocs.includes(doc.id) ? 'active' : ''}`}
+                  <div key={i} className={`doc-item tilt-card fade-up ${selectedDocs.includes(doc.id) ? 'active' : ''}`}
+                    style={{ animationDelay: `${i * 0.04}s` }}
                     onClick={() => onToggleDoc(doc.id)}>
                     <input type="checkbox" checked={selectedDocs.includes(doc.id)} onChange={() => onToggleDoc(doc.id)}
                       onClick={e => e.stopPropagation()} style={{ flexShrink: 0, accentColor: 'var(--accent)', cursor: 'pointer' }} />
@@ -377,7 +378,7 @@ function EmptyState({ onSuggest, docs }: { onSuggest: (q: string) => void; docs:
   return (
     <div className="flex flex-col items-center justify-center h-full gap-8 px-6">
       <div className="text-center">
-        <p style={{ fontFamily: 'var(--serif)', fontSize: 38, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1.1, marginBottom: 10 }}>
+        <p className="gradient-text" style={{ fontFamily: 'var(--serif)', fontSize: 38, fontStyle: 'italic', lineHeight: 1.1, marginBottom: 10 }}>
           What do you want<br />to know?
         </p>
         <p style={{ fontSize: 14, color: 'var(--text3)', lineHeight: 1.6 }}>
@@ -388,7 +389,7 @@ function EmptyState({ onSuggest, docs }: { onSuggest: (q: string) => void; docs:
       {suggestions.length > 0 && (
         <div className="grid grid-cols-2 gap-2 w-full max-w-lg">
           {suggestions.map((s, i) => (
-            <button key={i} className="suggestion fade-up" style={{ animationDelay: `${i * 0.06}s` }} onClick={() => onSuggest(s.label)}>
+            <button key={i} className="suggestion tilt-card fade-up" style={{ animationDelay: `${i * 0.06}s` }} onClick={() => onSuggest(s.label)}>
               <span className={`intent-pill intent-${s.intent}`} style={{ display: 'inline-block', marginBottom: 6 }}>{s.intent}</span>
               <p style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5, marginTop: 4 }}>{s.label}</p>
             </button>
@@ -921,6 +922,7 @@ export default function Home() {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      <div className="aura-bg"><span /><span /><span /></div>
       <Sidebar
         docs={docs} onUpload={handleUpload} uploading={uploading} uploadStatus={uploadStatus}
         sessionId={sessionId} msgCount={messages.length}
@@ -954,7 +956,7 @@ export default function Home() {
         />
       )}
 
-      <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--bg)' }}>
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'color-mix(in srgb, var(--bg) 82%, transparent)' }}>
         {/* Top bar */}
         <div className="flex items-center justify-between px-4 py-3 gap-3 flex-wrap"
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
