@@ -251,9 +251,7 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
 
   return (
     <>
-      {open && <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />}
-
-      <aside className={`sidebar fixed z-50 transition-transform duration-200
+      <aside className={`sidebar fixed z-50 transition-transform duration-200 pointer-events-auto
         ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between gap-3 p-5 pb-4">
           <div className="flex items-center gap-3">
