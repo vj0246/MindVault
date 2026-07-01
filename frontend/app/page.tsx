@@ -251,10 +251,10 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
 
   return (
     <>
-      {open && <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={onClose} />}
+      {open && <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />}
 
-      <aside className={`sidebar fixed md:relative z-50 md:z-auto transition-transform duration-200
-        ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside className={`sidebar fixed z-50 transition-transform duration-200
+        ${open ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center justify-between gap-3 p-5 pb-4">
           <div className="flex items-center gap-3">
             <div className="logo-mark">M</div>
@@ -263,7 +263,7 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
               <p className="eyebrow" style={{ marginTop: 2, textTransform: 'none', letterSpacing: 0 }}>knowledge · retrieved</p>
             </div>
           </div>
-          <button className="md:hidden icon-btn" onClick={onClose} style={{ color: 'var(--text3)', fontSize: 18 }}>✕</button>
+          <button className="icon-btn" onClick={onClose} style={{ color: 'var(--text3)', fontSize: 18 }}>✕</button>
         </div>
         <div className="divider" />
         <div className="flex flex-col gap-4 p-4 flex-1 min-h-0">
@@ -961,7 +961,7 @@ export default function Home() {
         <div className="flex items-center justify-between px-4 py-3 gap-3 flex-wrap"
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
           <div className="flex items-center gap-3 flex-wrap">
-            <button className="md:hidden icon-btn" style={{ color: 'var(--text3)', fontSize: 18 }}
+            <button className="icon-btn" title="Vault (documents, chats, memory)" style={{ color: 'var(--text3)', fontSize: 18 }}
               onClick={() => setSidebarOpen(true)}>☰</button>
             <div className="segmented">
               {MODES.map(m => (
