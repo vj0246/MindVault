@@ -13,22 +13,22 @@
   --mono: var(--font-mono);
   --sans: var(--font-sans);
 
-  --bg: #f8f9fc;
+  --bg: #f6f7f9;
   --surface: #ffffff;
-  --surface2: #eef1f6;
-  --surface3: #e2e7ef;
-  --text: #171a24;
-  --text2: #4c5265;
-  --text3: #8991a5;
-  --border: #e5e8f0;
-  --border2: #d3d8e4;
+  --surface2: #eef0f4;
+  --surface3: #e1e4ea;
+  --text: #14161f;
+  --text2: #3d4152;
+  --text3: #656b7d;
+  --border: #dfe2e9;
+  --border2: #c8cdd8;
 
-  --accent: #4f46e5;
-  --accent2: #d0870f;
-  --accent3: #0f9d78;
-  --danger: #dc3545;
-  --glow: rgba(79, 70, 229, 0.10);
-  --focus-ring: rgba(79, 70, 229, 0.35);
+  --accent: #3f51e0;
+  --accent2: #b3690a;
+  --accent3: #0c8562;
+  --danger: #cc2f36;
+  --glow: rgba(63, 81, 224, 0.10);
+  --focus-ring: rgba(63, 81, 224, 0.4);
 
   --shadow-sm: 0 1px 2px rgba(23, 26, 36, 0.05), 0 1px 1px rgba(23, 26, 36, 0.04);
   --shadow-md: 0 8px 24px -8px rgba(23, 26, 36, 0.14), 0 2px 6px rgba(23, 26, 36, 0.05);
@@ -46,15 +46,15 @@
   --surface: #161922;
   --surface2: #1e222c;
   --surface3: #272c38;
-  --text: #e8eaf0;
-  --text2: #a8afc0;
-  --text3: #6b7280;
+  --text: #eef0f6;
+  --text2: #bcc2d4;
+  --text3: #8b90a3;
   --border: #262b37;
-  --border2: #333944;
+  --border2: #363c4a;
 
-  --accent: #6366f1;
+  --accent: #7c86f5;
   --accent2: #e0994a;
-  --accent3: #22c08e;
+  --accent3: #2fd19d;
   --danger: #f87171;
   --glow: rgba(99, 102, 241, 0.16);
   --focus-ring: rgba(99, 102, 241, 0.4);
@@ -77,100 +77,16 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Ambient vault aura ─────────────────────────────────────────────────
-   Three slow-drifting blurred orbs in the accent colors, fixed behind the
-   whole app -- the "vault breathes" instead of sitting on a flat page.
-   Opacity is deliberately low; this is atmosphere, not a hero graphic. */
-.aura-bg {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.aura-bg span {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(70px);
-  opacity: 0.16;
-  will-change: transform;
-}
-.aura-bg span:nth-child(1) {
-  width: 46vw; height: 46vw; left: -12vw; top: -16vw;
-  background: var(--accent);
-  animation: auraDrift1 26s ease-in-out infinite;
-}
-.aura-bg span:nth-child(2) {
-  width: 38vw; height: 38vw; right: -10vw; top: 20vh;
-  background: var(--accent3);
-  animation: auraDrift2 32s ease-in-out infinite;
-}
-.aura-bg span:nth-child(3) {
-  width: 34vw; height: 34vw; left: 20vw; bottom: -18vw;
-  background: var(--accent2);
-  animation: auraDrift3 29s ease-in-out infinite;
-}
-[data-theme="dark"] .aura-bg span { opacity: 0.22; }
-
-@keyframes auraDrift1 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(6vw, 5vh) scale(1.12); }
-}
-@keyframes auraDrift2 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-5vw, 6vh) scale(1.08); }
-}
-@keyframes auraDrift3 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(4vw, -4vh) scale(1.1); }
-}
-
-/* Everything else needs to sit above the aura layer. */
 main { position: relative; z-index: 1; }
 
-/* Subtle 3D tilt for tangible, "physical document" feel on hover --
-   perspective lives on the item itself so it doesn't require a shared
-   ancestor transform context. */
+/* Quiet hover lift -- flat elevation change only, no rotation. Precision
+   over spectacle: this is a data product, not a landing page. */
 .tilt-card {
-  transform-style: preserve-3d;
-  transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
+  transition: transform 0.15s var(--ease), box-shadow 0.15s var(--ease), border-color 0.15s var(--ease);
 }
 .tilt-card:hover {
-  transform: perspective(700px) rotateX(2deg) rotateY(-2deg) translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-/* Gradient text for the hero headline -- a slow-moving sheen across the
-   serif italic, not a static fill. */
-.gradient-text {
-  background: linear-gradient(100deg, var(--text) 30%, var(--accent) 50%, var(--text) 70%);
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: sheen 7s ease-in-out infinite;
-}
-@keyframes sheen {
-  0%, 100% { background-position: 0% 0%; }
-  50% { background-position: 100% 0%; }
-}
-
-/* Logo halo -- a breathing glow behind the mark, like a status light on
-   the vault itself. */
-.logo-mark { position: relative; }
-.logo-mark::before {
-  content: '';
-  position: absolute;
-  inset: -8px;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
-  opacity: 0.35;
-  z-index: -1;
-  animation: halo 3.2s ease-in-out infinite;
-}
-@keyframes halo {
-  0%, 100% { transform: scale(0.9); opacity: 0.25; }
-  50% { transform: scale(1.15); opacity: 0.45; }
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 button, input, textarea { font-family: inherit; }
@@ -488,6 +404,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .send-btn:hover:not(:disabled) { background: #4338ca; }
 .send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
+/* ── Primary button ─────────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  padding: 11px 0;
+  width: 100%;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease), transform 0.1s var(--ease);
+}
+.btn-primary:hover:not(:disabled) { background: #333fc4; }
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary:active:not(:disabled) { transform: scale(0.99); }
+
 /* ── Typing / status ────────────────────────────────────────────────── */
 .dot {
   width: 5px;
@@ -609,19 +542,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   transform: scale(0.97);
 }
 
-/* Glass surfaces -- sidebar/composer/panels get a translucent, blurred
-   backdrop so the ambient aura reads through faintly instead of being
-   hidden behind flat opaque panels. Placed after their base rules so it
-   wins the cascade at equal specificity without needing !important. */
-.sidebar, .composer-card, .panel-block {
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .fade-up, .dot, .status-dot, .spinner, .toast,
-  .aura-bg span, .gradient-text, .logo-mark::before { animation: none !important; }
+  .fade-up, .dot, .status-dot, .spinner, .toast { animation: none !important; }
   * { transition: none !important; }
   .tilt-card:hover { transform: none; }
 }
