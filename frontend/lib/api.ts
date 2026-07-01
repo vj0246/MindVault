@@ -136,6 +136,16 @@ export async function getSharedSession(token: string) {
   return res.data  // { name, created_at, messages }
 }
 
+export async function getPreferences() {
+  const res = await api.get('/preferences')
+  return res.data  // { preferences: { tone, depth, format } | null }
+}
+
+export async function savePreferences(tone: string, depth: string, format: string) {
+  const res = await api.post('/preferences', { tone, depth, format })
+  return res.data
+}
+
 // Streaming query via SSE
 export function streamQuery(
   question: string, sessionId: string, mode: string,

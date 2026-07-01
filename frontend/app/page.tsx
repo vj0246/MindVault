@@ -22,6 +22,8 @@ import {
   renameSession,
   deleteSession,
   getSessionHistory,
+  getPreferences,
+  savePreferences,
 } from '../lib/api'
 
 type Mode = 'student' | 'lawyer' | 'developer' | 'default'
@@ -220,13 +222,13 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onExportPDF: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
   selectedDocs: string[]; onToggleDoc: (id: string) => void
   sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
-  onShare: (id: string) => void; sharingId: string | null
+  onShare: (id: string) => void; sharingId: string | null; onEditPreferences: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -248,19 +250,8 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
           <button className="md:hidden icon-btn" onClick={onClose} style={{ color: 'var(--text3)', fontSize: 18 }}>✕</button>
         </div>
         <div className="divider" />
-        <div className="flex flex-col gap-5 p-4 flex-1 overflow-y-auto">
-          <div className="panel-block">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="status-dot" />
-              <span style={{ fontSize: 10.5, color: 'var(--accent3)', fontFamily: 'var(--mono)' }}>Active session</span>
-            </div>
-            <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', wordBreak: 'break-all' }}>
-              {sessionId ? sessionId.slice(0, 20) + '...' : 'Loading...'}
-            </p>
-            <p style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4, fontFamily: 'var(--mono)' }}>{msgCount} messages</p>
-          </div>
-
-          <div>
+        <div className="flex flex-col gap-4 p-4 flex-1 min-h-0">
+          <div className="flex-shrink-0">
             <p className="eyebrow" style={{ marginBottom: 8 }}>Upload document</p>
             <div
               className={`upload-zone ${dragging ? 'drag-over' : ''}`}
@@ -286,17 +277,17 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
               onChange={(e) => { const files = Array.from(e.target.files || []); if (files.length) onUpload(files) }} />
           </div>
 
-          <div>
-            <div className="flex justify-between items-center mb-2">
+          <div className="flex flex-col flex-shrink-0" style={{ maxHeight: '30%' }}>
+            <div className="flex justify-between items-center mb-2 flex-shrink-0">
               <p className="eyebrow">Chats ({sessions.length})</p>
               <button onClick={onNewSession} className="chip" style={{
-                color: 'var(--accent)', background: 'rgba(61,127,104,0.08)', border: '1px solid rgba(61,127,104,0.2)', cursor: 'pointer'
+                color: 'var(--accent)', background: 'var(--glow)', border: '1px solid rgba(79,70,229,0.2)', cursor: 'pointer'
               }}>+ New</button>
             </div>
-            <div className="flex flex-col gap-0.5">
-              {sessions.map((s, i) => (
+            <div className="flex flex-col gap-0.5 overflow-y-auto">
+              {sessions.map((s) => (
                 <div key={s.id} onClick={() => onSelectSession(s.id)} className={`ledger-row ${s.id === sessionId ? 'active' : ''}`}>
-                  <span className="ledger-tick">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="ledger-tick">{String(s.number ?? '·').padStart(2, '0')}</span>
                   <span style={{
                     fontSize: 11, color: s.id === sessionId ? 'var(--accent)' : 'var(--text2)',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'var(--mono)'
@@ -318,8 +309,8 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             </div>
           </div>
 
-          <div className="flex-1">
-            <div className="flex justify-between items-center mb-2">
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex justify-between items-center mb-2 flex-shrink-0">
               <p className="eyebrow">Knowledge base ({docs.length})</p>
               <p style={{ fontSize: 9, fontFamily: 'var(--mono)', color: selectedDocs.length > 0 ? 'var(--accent)' : 'var(--text3)' }}>
                 {selectedDocs.length > 0 ? `${selectedDocs.length} selected` : 'all'}
@@ -328,7 +319,7 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             {docs.length === 0 ? (
               <p style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: '16px 0' }}>No documents yet</p>
             ) : (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 overflow-y-auto">
                 {docs.map((doc, i) => (
                   <div key={i} className={`doc-item fade-up ${selectedDocs.includes(doc.id) ? 'active' : ''}`}
                     onClick={() => onToggleDoc(doc.id)}>
@@ -346,12 +337,13 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             )}
           </div>
 
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 flex-shrink-0">
             <div className="flex gap-2">
               <button className="action-btn" style={{ flex: 1 }} onClick={onExport}>↓ MD</button>
               <button className="action-btn" style={{ flex: 1 }} onClick={onExportPDF}>↓ PDF</button>
             </div>
             <button className="action-btn" onClick={onNewSession}>+ New Session</button>
+            <button className="action-btn" onClick={onEditPreferences}>⚙ Preferences</button>
             <button className="action-btn danger" onClick={onClearSession}>✕ Clear History</button>
           </div>
         </div>
@@ -394,6 +386,64 @@ function EmptyState({ onSuggest, docs }: { onSuggest: (q: string) => void; docs:
   )
 }
 
+const PREF_TONES = ['Friendly', 'Neutral', 'Formal'] as const
+const PREF_DEPTHS = ['Brief', 'Moderate', 'Detailed'] as const
+const PREF_FORMATS = ['Bullet points', 'Prose', 'Mixed'] as const
+
+function PreferencesModal({ onSave, onClose, dismissable }: {
+  onSave: (tone: string, depth: string, format: string) => void
+  onClose: () => void
+  dismissable: boolean
+}) {
+  const [tone, setTone] = useState<string>(PREF_TONES[1])
+  const [depth, setDepth] = useState<string>(PREF_DEPTHS[1])
+  const [format, setFormat] = useState<string>(PREF_FORMATS[1])
+
+  const Picker = ({ label, options, value, onPick }: { label: string; options: readonly string[]; value: string; onPick: (v: string) => void }) => (
+    <div style={{ marginBottom: 18 }}>
+      <p className="eyebrow" style={{ marginBottom: 8 }}>{label}</p>
+      <div className="flex gap-2 flex-wrap">
+        {options.map(opt => (
+          <button key={opt} type="button" onClick={() => onPick(opt)}
+            className="segmented-item" style={{
+              border: '1px solid var(--border)',
+              background: value === opt ? 'var(--surface)' : 'transparent',
+              color: value === opt ? 'var(--accent)' : 'var(--text3)',
+              boxShadow: value === opt ? 'var(--shadow-sm)' : 'none',
+              padding: '6px 14px',
+            }}>{opt}</button>
+        ))}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(23,26,36,0.45)' }}>
+      <div style={{
+        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
+        boxShadow: 'var(--shadow-lift)', padding: 28, width: '100%', maxWidth: 420,
+      }}>
+        <p style={{ fontFamily: 'var(--serif)', fontSize: 22, fontStyle: 'italic', color: 'var(--text)', marginBottom: 4 }}>
+          How should MindVault talk to you?
+        </p>
+        <p style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 20 }}>
+          Sets a default style for answers — change it anytime from Preferences.
+        </p>
+        <Picker label="Tone" options={PREF_TONES} value={tone} onPick={setTone} />
+        <Picker label="Depth" options={PREF_DEPTHS} value={depth} onPick={setDepth} />
+        <Picker label="Format" options={PREF_FORMATS} value={format} onPick={setFormat} />
+        <div className="flex gap-2" style={{ marginTop: 8 }}>
+          {dismissable && (
+            <button className="action-btn" style={{ flex: 1 }} onClick={onClose}>Skip</button>
+          )}
+          <button className="send-btn" style={{ flex: 1, width: 'auto', borderRadius: 'var(--r-sm)', fontSize: 13, fontWeight: 500 }}
+            onClick={() => onSave(tone, depth, format)}>Save</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   const [sessionId, setSessionId] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
@@ -420,6 +470,8 @@ export default function Home() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const attachRef = useRef<HTMLInputElement>(null)
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [onboardingRequired, setOnboardingRequired] = useState(false)
 
   useEffect(() => {
     getSupabase().auth.getSession().then(({ data: { session } }) => {
@@ -436,9 +488,15 @@ export default function Home() {
         })
       }
       loadSessions()
+      getPreferences().then(r => { if (!r.preferences) { setOnboardingRequired(true); setShowOnboarding(true) } }).catch(() => {})
     })
     loadDocs()
   }, [])
+
+  const handleSavePreferences = async (tone: string, depth: string, format: string) => {
+    await savePreferences(tone, depth, format)
+    setShowOnboarding(false)
+  }
 
   // Streaming appends a token to `messages` on every chunk, which used to
   // re-trigger a *smooth* scrollIntoView each time — dozens of overlapping
@@ -720,7 +778,16 @@ export default function Home() {
         selectedDocs={selectedDocs} onToggleDoc={handleToggleDoc}
         sessions={sessions} onSelectSession={handleSelectSession} onDeleteSession={handleDeleteSession}
         onShare={handleShare} sharingId={sharingId}
+        onEditPreferences={() => { setOnboardingRequired(false); setShowOnboarding(true) }}
       />
+
+      {showOnboarding && (
+        <PreferencesModal
+          dismissable={!onboardingRequired}
+          onClose={() => setShowOnboarding(false)}
+          onSave={handleSavePreferences}
+        />
+      )}
 
       <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--bg)' }}>
         {/* Top bar */}

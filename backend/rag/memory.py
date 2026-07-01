@@ -162,3 +162,32 @@ def get_shared_session(token: str) -> dict | None:
 def revoke_share_token(session_id: str, user_id: str):
     supabase = get_supabase()
     supabase.table("chat_sessions")        .update({"share_token": None, "is_public": False})        .eq("id", session_id)        .eq("user_id", user_id)        .execute()
+
+# ─────────────────────────────────────────────────────────────
+# User preferences (onboarding profile -- injected into every
+# answer's system prompt so responses match the user's stated
+# tone/depth/format instead of a one-size-fits-all default).
+# ─────────────────────────────────────────────────────────────
+
+def get_user_preferences(user_id: str) -> dict | None:
+    supabase = get_supabase()
+    result = (
+        supabase.table("user_preferences")
+        .select("tone, depth, format")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+def save_user_preferences(user_id: str, tone: str, depth: str, format: str) -> dict:
+    supabase = get_supabase()
+    row = {
+        "user_id": user_id,
+        "tone": tone,
+        "depth": depth,
+        "format": format,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    supabase.table("user_preferences").upsert(row, on_conflict="user_id").execute()
+    return row
