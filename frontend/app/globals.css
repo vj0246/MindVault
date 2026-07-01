@@ -126,7 +126,7 @@ html, body {
 }
 
 /* Everything else needs to sit above the aura layer. */
-.sidebar, main { position: relative; z-index: 1; }
+main { position: relative; z-index: 1; }
 
 /* Subtle 3D tilt for tangible, "physical document" feel on hover --
    perspective lives on the item itself so it doesn't require a shared
