@@ -1,29 +1,44 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@300;400;500&family=Epilogue:wght@300;400;500;600&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ── Tokens ──────────────────────────────────────────────────────────────
+   "Ledger" direction: MindVault as a bound record of retrieved knowledge.
+   Paper base, ink text, three accents borrowed from wax-seal/ink-stamp
+   colors (gold, terracotta, teal) used sparingly as signal, not decoration.
+   Font vars come from next/font (app/layout.tsx) — no blocking @import. */
 :root {
-  /* Warm off-white, not stark #fff -- pure white reads clinical/cheap at
-     this scale; a warm near-white feels considered, like good paper. */
-  --bg: #fafaf8;
+  --font-serif: 'Instrument Serif', serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-sans: 'Epilogue', sans-serif;
+  --serif: var(--font-serif);
+  --mono: var(--font-mono);
+  --sans: var(--font-sans);
+
+  --bg: #f7f4ee;
   --surface: #ffffff;
-  --surface2: #f2f0ea;
-  --border: #e8e5dd;
-  --border2: #d6d2c7;
-  --text: #2b2823;
-  --text2: #6b675f;
-  --text3: #9a958a;
-  /* Same brand hues as the dark theme (gold/terracotta/teal), deepened.
-     The original pale gold/teal were tuned for contrast against near-black
-     and read washed-out/pastel against white -- same identity, recalibrated
-     for the new background, not a different palette. */
-  --accent: #b8902e;
-  --accent2: #b07a52;
-  --accent3: #4a8c76;
-  --danger: #b5483d;
-  --glow: rgba(184, 144, 46, 0.10);
+  --surface2: #efe9db;
+  --surface3: #e3dcc7;
+  --text: #201d17;
+  --text2: #5d5749;
+  --text3: #928a77;
+  --border: #e2ddce;
+  --border2: #cfc6ac;
+
+  --accent: #a9782a;
+  --accent2: #a85a3d;
+  --accent3: #3d7f68;
+  --danger: #b23b2f;
+  --glow: rgba(169, 120, 42, 0.12);
+  --focus-ring: rgba(169, 120, 42, 0.35);
+
+  --shadow-sm: 0 1px 2px rgba(32, 29, 23, 0.05), 0 1px 1px rgba(32, 29, 23, 0.04);
+  --shadow-md: 0 8px 24px -8px rgba(32, 29, 23, 0.16), 0 2px 6px rgba(32, 29, 23, 0.06);
+  --shadow-lift: 0 12px 32px -12px rgba(32, 29, 23, 0.22);
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -31,24 +46,25 @@
 html, body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Epilogue', sans-serif;
+  font-family: var(--sans), sans-serif;
   height: 100vh;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
+button, input, textarea { font-family: inherit; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
 * { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
 
-/* Grain overlay removed for the light theme -- the same noise texture
-   that read as subtle premium grain on near-black reads as smudged/dirty
-   paper on a white surface. Clean light-mode SaaS products (Linear,
-   Stripe, Vercel) don't use grain on light surfaces for this reason. */
-
-/* Sidebar */
+/* ── Sidebar (the Index) ────────────────────────────────────────────── */
 .sidebar {
   width: 280px;
   min-width: 280px;
@@ -60,43 +76,50 @@ html, body {
   overflow: hidden;
 }
 
-/* Logo mark */
 .logo-mark {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   background: var(--accent);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Instrument Serif', serif;
-  font-size: 18px;
+  font-family: var(--serif);
+  font-size: 19px;
   color: var(--bg);
   font-style: italic;
   flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text3);
+}
+
+.panel-block {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
 }
 
 /* Upload zone */
 .upload-zone {
   border: 1px dashed var(--border2);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   padding: 16px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
   position: relative;
   overflow: hidden;
 }
-
-.upload-zone:hover {
-  border-color: var(--accent);
-  background: rgba(184, 144, 46, 0.04);
-}
-
-.upload-zone.drag-over {
-  border-color: var(--accent);
-  background: rgba(184, 144, 46, 0.08);
-}
+.upload-zone:hover { border-color: var(--accent); background: var(--glow); }
+.upload-zone.drag-over { border-color: var(--accent); background: var(--glow); }
 
 /* Doc item */
 .doc-item {
@@ -104,280 +127,293 @@ html, body {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.12s ease, border-color 0.12s ease;
   border: 1px solid transparent;
 }
+.doc-item:hover { background: var(--surface2); border-color: var(--border); }
+.doc-item.active { background: rgba(169, 120, 42, 0.08); border-color: rgba(169, 120, 42, 0.25); }
 
-.doc-item:hover {
+/* Ledger row (chat sessions) — numbered like index entries */
+.ledger-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 4px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.ledger-row:hover { background: var(--surface2); }
+.ledger-row.active { background: rgba(169, 120, 42, 0.09); border-color: rgba(169, 120, 42, 0.22); }
+.ledger-tick {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text3);
+  width: 18px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.ledger-row.active .ledger-tick { color: var(--accent); }
+
+/* ── Segmented control (modes) ─────────────────────────────────────── */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
   background: var(--surface2);
-  border-color: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
 }
-
-.doc-item.active {
-  background: rgba(184, 144, 46, 0.06);
-  border-color: rgba(184, 144, 46, 0.2);
-}
-
-/* Mode tabs */
-.mode-tab {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
-  padding: 4px 10px;
-  border-radius: 4px;
-  border: 1px solid var(--border2);
+.segmented-item {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+  border-radius: 999px;
   color: var(--text3);
   cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  border: none;
+  background: transparent;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
 }
-
-.mode-tab:hover { color: var(--text2); border-color: var(--border2); }
-
-.mode-tab.active {
-  background: rgba(184, 144, 46, 0.1);
-  border-color: rgba(184, 144, 46, 0.4);
+.segmented-item:hover { color: var(--text2); }
+.segmented-item.active {
+  background: var(--surface);
   color: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 
-/* Messages */
+.graph-btn {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  padding: 6px 13px;
+  border-radius: 999px;
+  color: var(--accent3);
+  cursor: pointer;
+  border: 1px solid rgba(61, 127, 104, 0.3);
+  background: rgba(61, 127, 104, 0.06);
+  transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+.graph-btn:hover { background: rgba(61, 127, 104, 0.13); }
+
+/* ── Messages ───────────────────────────────────────────────────────── */
 .msg-user {
   background: var(--surface2);
   border: 1px solid var(--border2);
-  border-radius: 12px 12px 3px 12px;
+  border-radius: 14px 14px 3px 14px;
   padding: 12px 16px;
   max-width: 72%;
   align-self: flex-end;
 }
 
-.msg-ai {
-  background: transparent;
-  padding: 4px 0;
-  max-width: 85%;
-  align-self: flex-start;
+/* Assistant messages read like a ledger margin note: a quiet accent spine
+   instead of a repeated avatar circle on every turn — calmer at length. */
+.msg-ai-spine {
+  border-left: 2px solid rgba(169, 120, 42, 0.35);
+  padding-left: 16px;
 }
 
-/* Intent pill */
+.chip {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .intent-pill {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 2px 7px;
-  border-radius: 3px;
+  border-radius: 4px;
 }
+.intent-answer     { background: rgba(61, 127, 104, 0.12);  color: var(--accent3); border: 1px solid rgba(61, 127, 104, 0.25); }
+.intent-compare    { background: rgba(168, 90, 61, 0.12);   color: var(--accent2); border: 1px solid rgba(168, 90, 61, 0.25); }
+.intent-test       { background: rgba(169, 120, 42, 0.10);  color: var(--accent);  border: 1px solid rgba(169, 120, 42, 0.25); }
+.intent-summarize  { background: rgba(139, 105, 168, 0.10); color: #8b69a8;        border: 1px solid rgba(139, 105, 168, 0.25); }
 
-.intent-answer  { background: rgba(74, 140, 118, 0.12); color: var(--accent3); border: 1px solid rgba(74, 140, 118, 0.25); }
-.intent-compare { background: rgba(176, 122, 82, 0.12); color: var(--accent2); border: 1px solid rgba(176, 122, 82, 0.25); }
-.intent-test    { background: rgba(184, 144, 46, 0.10); color: var(--accent);  border: 1px solid rgba(184, 144, 46, 0.25); }
-.intent-summarize { background: rgba(155, 111, 176, 0.10); color: #9b6fb0; border: 1px solid rgba(155, 111, 176, 0.25); }
-
-/* Source chip */
 .source-chip {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 9px;
-  padding: 2px 7px;
-  border-radius: 3px;
-  background: rgba(184, 144, 46, 0.06);
-  border: 1px solid rgba(184, 144, 46, 0.15);
-  color: rgba(184, 144, 46, 0.6);
-  letter-spacing: 0.03em;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text2);
+  letter-spacing: 0.02em;
 }
 
-/* Related concept tag */
 .concept-tag {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 10px;
   padding: 3px 9px;
-  border-radius: 4px;
-  background: rgba(74, 140, 118, 0.08);
-  border: 1px solid rgba(74, 140, 118, 0.2);
+  border-radius: var(--r-sm);
+  background: rgba(61, 127, 104, 0.08);
+  border: 1px solid rgba(61, 127, 104, 0.22);
   color: var(--accent3);
   cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
+.concept-tag:hover { background: rgba(61, 127, 104, 0.16); border-color: rgba(61, 127, 104, 0.4); }
 
-.concept-tag:hover {
-  background: rgba(74, 140, 118, 0.15);
-  border-color: rgba(74, 140, 118, 0.4);
+/* ── Composer ───────────────────────────────────────────────────────── */
+.composer-wrap {
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--bg) 30%);
 }
-
-/* Input */
-.vault-input {
+.composer-card {
   background: var(--surface);
-  border: 1px solid var(--border2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  padding: 8px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.composer-card:focus-within { border-color: rgba(169, 120, 42, 0.4); }
+
+.vault-input {
+  background: transparent;
+  border: none;
   color: var(--text);
-  font-family: 'Epilogue', sans-serif;
+  font-family: var(--sans);
   font-size: 14px;
-  border-radius: 10px;
-  padding: 12px 16px;
+  border-radius: var(--r-sm);
+  padding: 10px 6px;
   resize: none;
-  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   width: 100%;
 }
-
-.vault-input:focus {
-  outline: none;
-  border-color: rgba(184, 144, 46, 0.4);
-}
-
+.vault-input:focus { outline: none; }
 .vault-input::placeholder { color: var(--text3); }
 
-/* Send button */
+.icon-btn {
+  flex-shrink: 0;
+  height: 40px;
+  width: 40px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+}
+.icon-btn:hover:not(:disabled) { background: var(--surface2); }
+.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .send-btn {
-  width: 42px;
-  height: 42px;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
   background: var(--accent);
   color: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.15s ease, transform 0.1s ease;
   flex-shrink: 0;
   font-size: 16px;
   font-weight: 600;
 }
+.send-btn:hover:not(:disabled) { background: #bb8b37; }
+.send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-.send-btn:hover:not(:disabled) {
-  background: #c9a23f;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(184, 144, 46, 0.3);
-}
-
-.send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-/* Typing dots */
-.dot { 
-  width: 5px; 
-  height: 5px; 
-  border-radius: 50%; 
+/* ── Typing / status ────────────────────────────────────────────────── */
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
   background: var(--text3);
-  animation: dotBounce 1.4s ease-in-out infinite;
+  animation: dotBounce 1.3s ease-in-out infinite;
 }
-.dot:nth-child(2) { animation-delay: 0.2s; }
-.dot:nth-child(3) { animation-delay: 0.4s; }
-
+.dot:nth-child(2) { animation-delay: 0.15s; }
+.dot:nth-child(3) { animation-delay: 0.3s; }
 @keyframes dotBounce {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-  30% { transform: translateY(-6px); opacity: 1; }
+  30% { transform: translateY(-5px); opacity: 1; }
 }
 
-/* Markdown */
-.md h1, .md h2, .md h3 {
-  font-family: 'Instrument Serif', serif;
-  color: var(--text);
-  margin: 14px 0 6px;
-  font-style: italic;
-}
-.md h1 { font-size: 20px; }
-.md h2 { font-size: 17px; }
-.md h3 { font-size: 15px; }
-.md p { margin: 6px 0; line-height: 1.75; color: var(--text); font-size: 14px; }
-.md ul, .md ol { padding-left: 18px; margin: 6px 0; }
-.md li { margin: 5px 0; line-height: 1.65; font-size: 14px; }
-.md strong { color: var(--text); font-weight: 600; }
-.md em { color: var(--accent2); font-style: italic; }
-.md code {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 12px;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  padding: 1px 5px;
-  border-radius: 3px;
-  color: var(--accent3);
-}
-.md pre {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 14px;
-  overflow-x: auto;
-  margin: 10px 0;
-}
-.md blockquote {
-  border-left: 2px solid var(--accent);
-  padding-left: 12px;
-  color: var(--text2);
-  margin: 8px 0;
-  font-style: italic;
-}
-.md table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
-.md th { background: var(--surface2); padding: 8px 12px; border: 1px solid var(--border2); color: var(--text2); font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-.md td { padding: 7px 12px; border: 1px solid var(--border); color: var(--text); }
-.md tr:hover td { background: var(--surface2); }
-
-/* Suggestion card */
-.suggestion {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  background: var(--surface);
-  text-align: left;
-}
-
-.suggestion:hover {
-  border-color: rgba(184, 144, 46, 0.3);
-  background: rgba(184, 144, 46, 0.04);
-  transform: translateY(-1px);
-}
-
-/* Fade in */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.fade-up { animation: fadeUp 0.3s ease forwards; }
-
-/* Status dot */
 .status-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--accent3);
   box-shadow: 0 0 6px var(--accent3);
-  animation: pulse 2s ease infinite;
+  animation: pulse 2.2s ease infinite;
 }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+/* ── Markdown ───────────────────────────────────────────────────────── */
+.md h1, .md h2, .md h3 { font-family: var(--serif); color: var(--text); margin: 14px 0 6px; font-style: italic; }
+.md h1 { font-size: 21px; }
+.md h2 { font-size: 18px; }
+.md h3 { font-size: 15px; }
+.md p { margin: 6px 0; line-height: 1.75; color: var(--text); font-size: 14px; }
+.md ul, .md ol { padding-left: 18px; margin: 6px 0; }
+.md li { margin: 5px 0; line-height: 1.65; font-size: 14px; }
+.md strong { color: var(--text); font-weight: 600; }
+.md em { color: var(--accent2); font-style: italic; }
+.md code { font-family: var(--mono); font-size: 12px; background: var(--surface2); border: 1px solid var(--border2); padding: 1px 5px; border-radius: 3px; color: var(--accent3); }
+.md pre { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 14px; overflow-x: auto; margin: 10px 0; }
+.md blockquote { border-left: 2px solid var(--accent); padding-left: 12px; color: var(--text2); margin: 8px 0; font-style: italic; }
+.md table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; }
+.md th { background: var(--surface2); padding: 8px 12px; border: 1px solid var(--border2); color: var(--text2); font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.md td { padding: 7px 12px; border: 1px solid var(--border); color: var(--text); }
+.md tr:hover td { background: var(--surface2); }
+
+/* ── Suggestion card ────────────────────────────────────────────────── */
+.suggestion {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 13px 15px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+  background: var(--surface);
+  text-align: left;
 }
+.suggestion:hover { border-color: rgba(169, 120, 42, 0.35); background: var(--glow); transform: translateY(-1px); }
 
-/* Divider */
-.divider {
-  height: 1px;
-  background: var(--border);
-  margin: 0;
+/* ── Motion ─────────────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+.fade-up { animation: fadeUp 0.22s ease forwards; }
 
-/* Action btn */
+.divider { height: 1px; background: var(--border); margin: 0; }
+
 .action-btn {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding: 6px 12px;
-  border-radius: 5px;
+  padding: 7px 12px;
+  border-radius: var(--r-sm);
   border: 1px solid var(--border2);
   color: var(--text3);
   cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
   background: transparent;
   width: 100%;
   text-align: center;
 }
+.action-btn:hover { color: var(--text2); background: var(--surface2); }
+.action-btn.danger:hover { color: var(--danger); border-color: rgba(178, 59, 47, 0.35); }
 
-.action-btn:hover { color: var(--text2); border-color: var(--border2); background: var(--surface2); }
-
-.action-btn.danger:hover { color: var(--danger); border-color: rgba(181, 72, 61, 0.3); }
-
-/* Spinner */
 .spinner {
   width: 16px;
   height: 16px;
@@ -386,62 +422,50 @@ html, body {
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
-
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Toast */
 .toast {
   position: fixed;
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  border-radius: 8px;
+  background: var(--text);
+  border: 1px solid var(--text);
+  border-radius: var(--r-md);
   padding: 10px 18px;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 12px;
-  color: var(--text2);
+  color: var(--bg);
   z-index: 999;
-  animation: fadeUp 0.3s ease;
+  animation: fadeUp 0.22s ease;
   white-space: nowrap;
+  box-shadow: var(--shadow-lift);
 }
+.toast.success { background: var(--accent3); border-color: var(--accent3); color: #fff; }
+.toast.error   { background: var(--danger);  border-color: var(--danger); color: #fff; }
 
-.toast.success { border-color: rgba(74, 140, 118, 0.3); color: var(--accent3); }
-.toast.error   { border-color: rgba(181, 72, 61, 0.3);  color: var(--danger); }
-
-/* Press feedback -- subtle, fast, makes the UI feel responsive to touch
-   and click alike instead of interactive elements feeling inert. */
 .action-btn:active,
 .send-btn:active:not(:disabled),
-.mode-tab:active,
+.segmented-item:active,
 .doc-item:active,
 .suggestion:active,
 .upload-zone:active {
   transform: scale(0.97);
 }
 
-/* ── Mobile ──────────────────────────────────────────────────────────────
-   Real fixes, not just smaller fonts:
-   - 16px input font-size prevents iOS Safari's auto-zoom-on-focus, which
-     otherwise fires on any input/textarea under 16px and is jarring on a
-     chat app where the input is the primary interaction.
-   - 44px is Apple's own minimum recommended tap target; several icon
-     buttons (delete, share) were sized for mouse precision, not thumbs.
-   - Safe-area padding keeps the input bar clear of the home-indicator
-     area on notched phones instead of sitting flush against it.
-*/
+@media (prefers-reduced-motion: reduce) {
+  .fade-up, .dot, .status-dot, .spinner, .toast { animation: none !important; }
+  * { transition: none !important; }
+}
+
+/* ── Mobile ─────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .vault-input { font-size: 16px; }
-
-  .send-btn { width: 46px; height: 46px; }
-
+  .send-btn, .icon-btn { width: 44px; height: 44px; }
   .action-btn { padding: 9px 12px; font-size: 11px; }
-
   .doc-item { padding: 10px 12px; }
-
-  .mode-tab { padding: 7px 12px; font-size: 11px; }
-
+  .segmented-item { padding: 7px 12px; font-size: 11px; }
+  .composer-wrap { padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
   .toast {
     left: 16px; right: 16px; transform: none;
     bottom: calc(16px + env(safe-area-inset-bottom));
@@ -449,9 +473,6 @@ html, body {
   }
 }
 
-/* Any element carrying this class gets a comfortable minimum tap target
-   on touch screens regardless of its visual (icon-sized) footprint --
-   the visible icon stays small, the tappable area doesn't. */
 @media (hover: none) and (pointer: coarse) {
   .tap-target {
     min-width: 40px;

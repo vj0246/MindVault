@@ -35,11 +35,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center h-screen" style={{ background: 'var(--bg)' }}>
+    <div className="flex items-center justify-center h-screen px-4" style={{ background: 'var(--bg)' }}>
       <div style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
-        borderRadius: 12,
+        borderRadius: 'var(--r-lg)',
+        boxShadow: 'var(--shadow-md)',
         padding: 40,
         width: '100%',
         maxWidth: 400
@@ -47,8 +48,8 @@ export default function LoginPage() {
         <div className="flex items-center gap-3 mb-8">
           <div className="logo-mark">M</div>
           <div>
-            <h1 style={{ fontFamily: 'Instrument Serif', fontSize: 22, fontStyle: 'italic', color: 'var(--text)' }}>MindVault</h1>
-            <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>knowledge · retrieved</p>
+            <h1 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontStyle: 'italic', color: 'var(--text)' }}>MindVault</h1>
+            <p className="eyebrow" style={{ textTransform: 'none', letterSpacing: 0 }}>knowledge · retrieved</p>
           </div>
         </div>
 
@@ -63,7 +64,7 @@ export default function LoginPage() {
             value={email}
             onChange={e => setEmail(e.target.value)}
             className="vault-input"
-            style={{ minHeight: 44 }}
+            style={{ minHeight: 44, border: '1px solid var(--border2)', background: 'var(--bg)' }}
           />
           <input
             type="password"
@@ -71,15 +72,15 @@ export default function LoginPage() {
             value={password}
             onChange={e => setPassword(e.target.value)}
             className="vault-input"
-            style={{ minHeight: 44 }}
+            style={{ minHeight: 44, border: '1px solid var(--border2)', background: 'var(--bg)' }}
             onKeyDown={e => e.key === 'Enter' && handle()}
           />
 
           {error && (
-            <p style={{ fontSize: 12, color: '#e87171', fontFamily: 'IBM Plex Mono' }}>{error}</p>
+            <p style={{ fontSize: 12, color: 'var(--danger)', fontFamily: 'var(--mono)' }}>{error}</p>
           )}
           {message && (
-            <p style={{ fontSize: 12, color: 'var(--accent3)', fontFamily: 'IBM Plex Mono' }}>{message}</p>
+            <p style={{ fontSize: 12, color: 'var(--accent3)', fontFamily: 'var(--mono)' }}>{message}</p>
           )}
 
           <button
@@ -93,7 +94,7 @@ export default function LoginPage() {
 
           <button
             onClick={() => { setIsSignup(!isSignup); setError(''); setMessage('') }}
-            style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4 }}
+            style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4 }}
           >
             {isSignup ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
           </button>

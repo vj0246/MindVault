@@ -102,16 +102,10 @@ function getDynamicSuggestions(docs: Doc[]) {
 
 function TypingIndicator() {
   return (
-    <div className="flex items-start gap-3 fade-up px-1">
-      <div className="w-5 h-5 rounded-full flex-shrink-0 mt-1 flex items-center justify-center"
-        style={{ background: 'rgba(184,144,46,0.12)', border: '1px solid rgba(184,144,46,0.2)' }}>
-        <span style={{ fontSize: 8, color: 'var(--accent)' }}>M</span>
-      </div>
-      <div className="flex items-center gap-1.5 py-3">
+    <div className="flex items-center gap-3 fade-up px-1 msg-ai-spine">
+      <div className="flex items-center gap-1.5 py-2">
         <div className="dot" /><div className="dot" /><div className="dot" />
-        <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginLeft: 6 }}>
-          retrieving from vault
-        </span>
+        <span className="eyebrow" style={{ marginLeft: 6 }}>retrieving from vault</span>
       </div>
     </div>
   )
@@ -123,14 +117,10 @@ function IntentPill({ intent }: { intent: string }) {
 
 function ConfidenceBadge({ score }: { score: number }) {
   const pct = Math.round(score * 100)
-  const color = score >= 0.7 ? '#4ade80' : score >= 0.4 ? '#facc15' : '#f87171'
+  const color = score >= 0.7 ? '#3d7f68' : score >= 0.4 ? '#a9782a' : '#b23b2f'
   const label = score >= 0.7 ? 'High' : score >= 0.4 ? 'Medium' : 'Low'
   return (
-    <span style={{
-      fontSize: 9, fontFamily: 'IBM Plex Mono', padding: '2px 7px',
-      borderRadius: 4, border: `1px solid ${color}33`,
-      color, background: `${color}11`, marginLeft: 6
-    }}>
+    <span className="chip" style={{ border: `1px solid ${color}33`, color, background: `${color}11`, marginLeft: 6 }}>
       {label} {pct}%
     </span>
   )
@@ -144,50 +134,35 @@ function SourcePanel({ chunks }: { chunks: ChunkSource[] }) {
   }
   return (
     <div style={{ display: 'inline-block' }}>
-      <button
-        onClick={() => setOpen(!open)}
-        style={{
-          fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--text3)',
-          background: 'var(--surface2)', border: '1px solid var(--border)',
-          borderRadius: 4, padding: '2px 7px', cursor: 'pointer', marginLeft: 4,
-          transition: 'color 0.15s'
-        }}
-        title="View source chunks"
-      >
+      <button onClick={() => setOpen(!open)} className="chip tap-target" title="View source chunks"
+        style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text3)', cursor: 'pointer', marginLeft: 4 }}>
         {open ? '▲ sources' : 'ℹ sources'}
       </button>
       {open && (
-        <div style={{
-          marginTop: 8, background: 'var(--surface2)', border: '1px solid var(--border)',
-          borderRadius: 8, overflow: 'hidden'
-        }}>
+        <div style={{ marginTop: 8, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
           {chunks.map((c, i) => (
-            <div key={i} style={{
-              padding: '10px 12px',
-              borderBottom: i < chunks.length - 1 ? '1px solid var(--border)' : 'none'
-            }}>
+            <div key={i} style={{ padding: '10px 12px', borderBottom: i < chunks.length - 1 ? '1px solid var(--border)' : 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 10, fontFamily: 'IBM Plex Mono', color: 'var(--accent)', fontWeight: 600 }}>
-                    📄 {c.filename}
-                  </span>
+                  <span className="chip" style={{ color: 'var(--accent)', fontWeight: 600, padding: 0 }}>📄 {c.filename}</span>
                   {(c.page_number != null && c.page_number > 0) && (
-                    <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--text3)', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 3, padding: '1px 5px' }}>
+                    <span className="chip" style={{ color: 'var(--text3)', background: 'var(--surface)', border: '1px solid var(--border)' }}>
                       p.{(c.page_number ?? 0) + 1}
                     </span>
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--accent3)', background: 'rgba(74,140,118,0.1)', border: '1px solid rgba(74,140,118,0.2)', borderRadius: 3, padding: '1px 6px' }}>
+                  <span className="chip" style={{ color: 'var(--accent3)', background: 'rgba(61,127,104,0.1)', border: '1px solid rgba(61,127,104,0.2)' }}>
                     {Math.round(c.similarity * 100)}% match
                   </span>
                   <button onClick={() => copyChunk(c.content, i)} title="Copy chunk text — paste in PDF viewer to find passage"
-                    style={{ fontSize: 9, cursor: 'pointer', background: 'none', border: 'none', color: copied === i ? 'var(--accent)' : 'var(--text3)', padding: 0 }}>
+                    className="tap-target"
+                    style={{ fontSize: 11, cursor: 'pointer', background: 'none', border: 'none', color: copied === i ? 'var(--accent)' : 'var(--text3)', padding: 0 }}>
                     {copied === i ? '✓' : '⎘'}
                   </button>
                 </div>
               </div>
-              <p style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.55, fontFamily: 'IBM Plex Mono' }}>
+              <p style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.55, fontFamily: 'var(--mono)' }}>
                 {c.content}{c.content.length >= 200 ? '…' : ''}
               </p>
             </div>
@@ -209,7 +184,7 @@ function MessageBubble({ msg, onConceptClick }: {
           <div className="msg-user" style={{ textAlign: 'left', display: 'inline-block', maxWidth: '100%' }}>
             <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{msg.content}</p>
           </div>
-          <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'right', marginTop: 4 }}>
+          <p className="eyebrow" style={{ textAlign: 'right', marginTop: 4, textTransform: 'none', letterSpacing: 0 }}>
             {timeStr(msg.timestamp)}
           </p>
         </div>
@@ -218,43 +193,29 @@ function MessageBubble({ msg, onConceptClick }: {
   }
 
   return (
-    <div className="flex items-start gap-3 fade-up">
-      <div className="w-5 h-5 rounded-full flex-shrink-0 mt-1 flex items-center justify-center"
-        style={{ background: 'rgba(184,144,46,0.12)', border: '1px solid rgba(184,144,46,0.2)' }}>
-        <span style={{ fontSize: 8, color: 'var(--accent)', fontFamily: 'Instrument Serif', fontStyle: 'italic' }}>M</span>
+    <div className="fade-up msg-ai-spine">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="eyebrow" style={{ fontFamily: 'var(--mono)', textTransform: 'none', letterSpacing: 0, color: 'var(--text3)' }}>MindVault</span>
+        {msg.intent && <IntentPill intent={msg.intent} />}
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-2">
-          <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>MindVault</span>
-          {msg.intent && <IntentPill intent={msg.intent} />}
+      <div className="md"><ReactMarkdown>{msg.content}</ReactMarkdown></div>
+      {msg.sources && msg.sources.length > 0 && msg.sources[0] !== 'conversation history' && (
+        <div className="mt-3 flex flex-wrap gap-1 items-center">
+          {msg.sources.map((s, i) => <span key={i} className="source-chip">📄 {s}</span>)}
+          {msg.chunks && msg.chunks.length > 0 && <SourcePanel chunks={msg.chunks} />}
         </div>
-        <div className="md"><ReactMarkdown>{msg.content}</ReactMarkdown></div>
-        {msg.sources && msg.sources.length > 0 && msg.sources[0] !== 'conversation history' && (
-          <div className="mt-3">
-            <div className="flex flex-wrap gap-1 items-center">
-              {msg.sources.map((s, i) => <span key={i} className="source-chip">📄 {s}</span>)}
-              {msg.chunks && msg.chunks.length > 0 && (
-                <SourcePanel chunks={msg.chunks} />
-              )}
-            </div>
+      )}
+      {msg.related_concepts && msg.related_concepts.length > 0 && (
+        <div className="mt-3">
+          <p className="eyebrow" style={{ marginBottom: 6 }}>Related concepts — click to explore graph</p>
+          <div className="flex flex-wrap gap-1.5">
+            {msg.related_concepts.slice(0, 6).map((c, i) => (
+              <button key={i} className="concept-tag" onClick={() => onConceptClick(c.id)}>⬡ {c.id}</button>
+            ))}
           </div>
-        )}
-        {msg.related_concepts && msg.related_concepts.length > 0 && (
-          <div className="mt-3">
-            <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Related concepts — click to explore graph
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {msg.related_concepts.slice(0, 6).map((c, i) => (
-                <button key={i} className="concept-tag" onClick={() => onConceptClick(c.id)}>⬡ {c.id}</button>
-              ))}
-            </div>
-          </div>
-        )}
-        <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginTop: 6 }}>
-          {timeStr(msg.timestamp)}
-        </p>
-      </div>
+        </div>
+      )}
+      <p className="eyebrow" style={{ marginTop: 6, textTransform: 'none', letterSpacing: 0 }}>{timeStr(msg.timestamp)}</p>
     </div>
   )
 }
@@ -272,42 +233,35 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
 
   return (
     <>
-      {/* Mobile overlay */}
-      {open && (
-        <div className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={onClose} />
-      )}
+      {open && <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={onClose} />}
 
-      <aside className={`sidebar fixed md:relative z-50 md:z-auto transition-transform duration-300
+      <aside className={`sidebar fixed md:relative z-50 md:z-auto transition-transform duration-200
         ${open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="flex items-center justify-between gap-3 p-5 pb-4">
           <div className="flex items-center gap-3">
             <div className="logo-mark">M</div>
             <div>
-              <h1 style={{ fontFamily: 'Instrument Serif', fontSize: 18, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1 }}>MindVault</h1>
-              <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginTop: 2 }}>knowledge · retrieved</p>
+              <h1 style={{ fontFamily: 'var(--serif)', fontSize: 19, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1 }}>MindVault</h1>
+              <p className="eyebrow" style={{ marginTop: 2, textTransform: 'none', letterSpacing: 0 }}>knowledge · retrieved</p>
             </div>
           </div>
-          <button className="md:hidden" onClick={onClose}
-            style={{ color: 'var(--text3)', fontSize: 18, padding: 4 }}>✕</button>
+          <button className="md:hidden icon-btn" onClick={onClose} style={{ color: 'var(--text3)', fontSize: 18 }}>✕</button>
         </div>
         <div className="divider" />
-        <div className="flex flex-col gap-4 p-4 flex-1 overflow-y-auto">
-          <div>
-            <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Session</p>
-            <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px' }}>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="status-dot" />
-                <span style={{ fontSize: 10, color: 'var(--accent3)', fontFamily: 'IBM Plex Mono' }}>Active</span>
-              </div>
-              <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', wordBreak: 'break-all' }}>
-                {sessionId ? sessionId.slice(0, 20) + '...' : 'Loading...'}
-              </p>
-              <p style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4, fontFamily: 'IBM Plex Mono' }}>{msgCount} messages</p>
+        <div className="flex flex-col gap-5 p-4 flex-1 overflow-y-auto">
+          <div className="panel-block">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="status-dot" />
+              <span style={{ fontSize: 10.5, color: 'var(--accent3)', fontFamily: 'var(--mono)' }}>Active session</span>
             </div>
+            <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', wordBreak: 'break-all' }}>
+              {sessionId ? sessionId.slice(0, 20) + '...' : 'Loading...'}
+            </p>
+            <p style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4, fontFamily: 'var(--mono)' }}>{msgCount} messages</p>
           </div>
 
           <div>
-            <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Upload Document</p>
+            <p className="eyebrow" style={{ marginBottom: 8 }}>Upload document</p>
             <div
               className={`upload-zone ${dragging ? 'drag-over' : ''}`}
               onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
@@ -318,13 +272,13 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
               {uploading ? (
                 <div className="flex flex-col items-center gap-2 py-2">
                   <div className="spinner" />
-                  <p style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'IBM Plex Mono' }}>{uploadStatus}</p>
+                  <p style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>{uploadStatus}</p>
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-1 py-2">
                   <span style={{ fontSize: 22, marginBottom: 2 }}>📄</span>
                   <p style={{ fontSize: 12, color: 'var(--text2)' }}>Drop files or click</p>
-                  <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>PDF · TXT · MD · DOCX · Images</p>
+                  <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>PDF · TXT · MD · DOCX · Images</p>
                 </div>
               )}
             </div>
@@ -332,58 +286,42 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
               onChange={(e) => { const files = Array.from(e.target.files || []); if (files.length) onUpload(files) }} />
           </div>
 
-
-            {/* ── Chat Sessions ─────────────────────────────── */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Chats ({sessions.length})
-                </p>
-                <button onClick={onNewSession} style={{
-                  fontSize: 9, fontFamily: 'IBM Plex Mono', color: 'var(--accent)',
-                  background: 'rgba(74,140,118,0.08)', border: '1px solid rgba(74,140,118,0.2)',
-                  borderRadius: 4, padding: '2px 8px', cursor: 'pointer'
-                }}>+ New</button>
-              </div>
-              {sessions.map(s => (
-                <div key={s.id} onClick={() => onSelectSession(s.id)} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '6px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 2,
-                  background: s.id === sessionId ? 'rgba(74,140,118,0.1)' : 'transparent',
-                  border: s.id === sessionId ? '1px solid rgba(74,140,118,0.2)' : '1px solid transparent',
-                }}>
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <p className="eyebrow">Chats ({sessions.length})</p>
+              <button onClick={onNewSession} className="chip" style={{
+                color: 'var(--accent)', background: 'rgba(61,127,104,0.08)', border: '1px solid rgba(61,127,104,0.2)', cursor: 'pointer'
+              }}>+ New</button>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {sessions.map((s, i) => (
+                <div key={s.id} onClick={() => onSelectSession(s.id)} className={`ledger-row ${s.id === sessionId ? 'active' : ''}`}>
+                  <span className="ledger-tick">{String(i + 1).padStart(2, '0')}</span>
                   <span style={{
                     fontSize: 11, color: s.id === sessionId ? 'var(--accent)' : 'var(--text2)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
-                    fontFamily: 'IBM Plex Mono'
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'var(--mono)'
                   }}>
-                    {s.name.slice(0, 28)}{s.name.length > 28 ? '…' : ''}
+                    {s.name.slice(0, 26)}{s.name.length > 26 ? '…' : ''}
                   </span>
-                  <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                    <button onClick={e => { e.stopPropagation(); onShare(s.id) }}
-                      disabled={sharingId === s.id}
-                      title="Copy share link"
-                      className="tap-target"
+                  <div className="flex gap-0.5 flex-shrink-0">
+                    <button onClick={e => { e.stopPropagation(); onShare(s.id) }} disabled={sharingId === s.id}
+                      title="Copy share link" className="tap-target"
                       style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>
                       {sharingId === s.id ? '…' : '🔗'}
                     </button>
-                    <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }}
-                      className="tap-target"
+                    <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }} className="tap-target"
                       style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>✕</button>
                   </div>
                 </div>
               ))}
-              {sessions.length === 0 && (
-                <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>No chats yet</p>
-              )}
+              {sessions.length === 0 && <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>No chats yet</p>}
             </div>
+          </div>
 
           <div className="flex-1">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                Knowledge Base ({docs.length})
-              </p>
-              <p style={{ fontSize: 9, fontFamily: 'IBM Plex Mono', color: selectedDocs.length > 0 ? 'var(--accent)' : 'var(--text3)' }}>
+            <div className="flex justify-between items-center mb-2">
+              <p className="eyebrow">Knowledge base ({docs.length})</p>
+              <p style={{ fontSize: 9, fontFamily: 'var(--mono)', color: selectedDocs.length > 0 ? 'var(--accent)' : 'var(--text3)' }}>
                 {selectedDocs.length > 0 ? `${selectedDocs.length} selected` : 'all'}
               </p>
             </div>
@@ -392,18 +330,13 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             ) : (
               <div className="flex flex-col gap-1">
                 {docs.map((doc, i) => (
-                  <div key={i} className={`doc-item fade-up ${selectedDocs.includes(doc.id) ? 'active' : ''}`} style={{ cursor: 'pointer' }}
+                  <div key={i} className={`doc-item fade-up ${selectedDocs.includes(doc.id) ? 'active' : ''}`}
                     onClick={() => onToggleDoc(doc.id)}>
-                    <input
-                      type="checkbox"
-                      checked={selectedDocs.includes(doc.id)}
-                      onChange={() => onToggleDoc(doc.id)}
-                      onClick={e => e.stopPropagation()}
-                      style={{ flexShrink: 0, accentColor: 'var(--accent)', cursor: 'pointer' }}
-                    />
+                    <input type="checkbox" checked={selectedDocs.includes(doc.id)} onChange={() => onToggleDoc(doc.id)}
+                      onClick={e => e.stopPropagation()} style={{ flexShrink: 0, accentColor: 'var(--accent)', cursor: 'pointer' }} />
                     <div className="flex-1 min-w-0">
                       <p style={{ fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</p>
-                      <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>
+                      <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
                         {doc.chunk_count} chunks · {new Date(doc.uploaded_at).toLocaleDateString()}
                       </p>
                     </div>
@@ -433,20 +366,18 @@ function EmptyState({ onSuggest, docs }: { onSuggest: (q: string) => void; docs:
   return (
     <div className="flex flex-col items-center justify-center h-full gap-8 px-6">
       <div className="text-center">
-        <p style={{ fontFamily: 'Instrument Serif', fontSize: 36, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1.1, marginBottom: 10 }}>
+        <p style={{ fontFamily: 'var(--serif)', fontSize: 38, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1.1, marginBottom: 10 }}>
           What do you want<br />to know?
         </p>
         <p style={{ fontSize: 14, color: 'var(--text3)', lineHeight: 1.6 }}>
-          {docs.length === 0
-            ? 'Upload a document to get started.'
-            : 'Ask anything from your uploaded documents.'}
+          {docs.length === 0 ? 'Upload a document to get started.' : 'Ask anything from your uploaded documents.'}
         </p>
       </div>
 
       {suggestions.length > 0 && (
         <div className="grid grid-cols-2 gap-2 w-full max-w-lg">
           {suggestions.map((s, i) => (
-            <button key={i} className="suggestion fade-up" style={{ animationDelay: `${i * 0.08}s` }} onClick={() => onSuggest(s.label)}>
+            <button key={i} className="suggestion fade-up" style={{ animationDelay: `${i * 0.06}s` }} onClick={() => onSuggest(s.label)}>
               <span className={`intent-pill intent-${s.intent}`} style={{ display: 'inline-block', marginBottom: 6 }}>{s.intent}</span>
               <p style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5, marginTop: 4 }}>{s.label}</p>
             </button>
@@ -456,9 +387,7 @@ function EmptyState({ onSuggest, docs }: { onSuggest: (q: string) => void; docs:
 
       {docs.length === 0 && (
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, width: '100%', maxWidth: 480 }}>
-          <p style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'center', lineHeight: 1.6 }}>
-            Upload · Ask · Learn
-          </p>
+          <p className="eyebrow" style={{ textAlign: 'center', letterSpacing: '0.1em' }}>Upload · Ask · Learn</p>
         </div>
       )}
     </div>
@@ -486,32 +415,48 @@ export default function Home() {
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [sharingId, setSharingId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const stickToBottomRef = useRef(true)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const attachRef = useRef<HTMLInputElement>(null)
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
-  useEffect(() => {
-  getSupabase().auth.getSession().then(({ data: { session } }) => {
-    if (!session) { window.location.href = '/login'; return }
-    const uid = session.user.id
-    setUserId(uid)
-    // Restore last active session from localStorage, or create fresh one
-    const stored = localStorage.getItem(`mv_session_${uid}`)
-    if (stored) {
-      setSessionId(stored)
-    } else {
-      createSession().then(s => {
-        setSessionId(s.session_id)
-        localStorage.setItem(`mv_session_${uid}`, s.session_id)
-      })
-    }
-    loadSessions()
-  })
-  loadDocs()
-}, [])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    getSupabase().auth.getSession().then(({ data: { session } }) => {
+      if (!session) { window.location.href = '/login'; return }
+      const uid = session.user.id
+      setUserId(uid)
+      const stored = localStorage.getItem(`mv_session_${uid}`)
+      if (stored) {
+        setSessionId(stored)
+      } else {
+        createSession().then(s => {
+          setSessionId(s.session_id)
+          localStorage.setItem(`mv_session_${uid}`, s.session_id)
+        })
+      }
+      loadSessions()
+    })
+    loadDocs()
+  }, [])
+
+  // Streaming appends a token to `messages` on every chunk, which used to
+  // re-trigger a *smooth* scrollIntoView each time — dozens of overlapping
+  // scroll animations per second is what made the chat feel laggy. Track
+  // whether the user is already near the bottom and, if so, snap instantly
+  // instead of restarting a smooth animation every token.
+  useEffect(() => {
+    if (stickToBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
+    }
   }, [messages, loading])
+
+  const handleListScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    stickToBottomRef.current = distanceFromBottom < 96
+  }
 
   const showToast = (msg: string, type: Toast['type'] = 'info') => {
     setToast({ msg, type })
@@ -598,6 +543,7 @@ export default function Home() {
     const question = (text || input).trim()
     if (!question || loading || !sessionId) return
 
+    stickToBottomRef.current = true
     const fileToSend = attachedFile
     const userContent = fileToSend ? `📎 ${fileToSend.name}\n${question}` : question
     const assistantId = genId()
@@ -613,7 +559,6 @@ export default function Home() {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     if (fileToSend) {
-      // Attachment: use non-streaming path (multipart/form-data can't stream easily)
       try {
         const result = await queryWithAttachment(question, sessionId, mode, selectedDocs, fileToSend)
         setMessages(prev => prev.map(m => m.id === assistantId ? {
@@ -632,7 +577,6 @@ export default function Home() {
       return
     }
 
-    // Normal query: SSE streaming
     const { getSupabase: _sb } = await import('../lib/supabase')
     const { data: { session: _session } } = await _sb().auth.getSession()
     const token = _session?.access_token || ''
@@ -647,7 +591,6 @@ export default function Home() {
           confidence: meta.confidence ?? undefined,
           intent: meta.intent,
         } : m))
-        // Auto-name session
         const activeSession = sessions.find(s => s.id === sessionId)
         if (!activeSession || activeSession.name === 'New Chat') {
           renameSession(sessionId, question.slice(0, 45)).then(() => loadSessions()).catch(() => {})
@@ -672,7 +615,6 @@ export default function Home() {
       }
     )
 
-    // Cleanup on unmount (rare but safe)
     return cancel
   }, [input, loading, mode, sessionId, attachedFile, selectedDocs, sessions])
 
@@ -756,9 +698,7 @@ export default function Home() {
   }
 
   const handleToggleDoc = (id: string) => {
-    setSelectedDocs(prev =>
-      prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id]
-    )
+    setSelectedDocs(prev => prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id])
   }
 
   const handleClearSession = async () => {
@@ -784,46 +724,37 @@ export default function Home() {
 
       <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--bg)' }}>
         {/* Top bar */}
-        <div className="flex items-center justify-between px-4 py-3"
+        <div className="flex items-center justify-between px-4 py-3 gap-3 flex-wrap"
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
-          <div className="flex items-center gap-2">
-            {/* Hamburger — mobile only */}
-            <button className="md:hidden mr-2 p-1"
-              style={{ color: 'var(--text3)', fontSize: 18 }}
+          <div className="flex items-center gap-3 flex-wrap">
+            <button className="md:hidden icon-btn" style={{ color: 'var(--text3)', fontSize: 18 }}
               onClick={() => setSidebarOpen(true)}>☰</button>
-            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mode</span>
-            <div className="flex gap-1 flex-wrap">
+            <div className="segmented">
               {MODES.map(m => (
-                <button key={m.value} className={`mode-tab ${mode === m.value ? 'active' : ''}`}
+                <button key={m.value} className={`segmented-item ${mode === m.value ? 'active' : ''}`}
                   onClick={() => setMode(m.value)} title={m.desc}>{m.label}</button>
               ))}
             </div>
-            <button
-              className="mode-tab"
-              onClick={handleViewFullGraph}
-              style={{ marginLeft: 6, color: 'var(--accent3)', borderColor: 'rgba(74,140,118,0.3)' }}
-            >
-              ⬡ Graph
-            </button>
+            <button className="graph-btn" onClick={handleViewFullGraph}>⬡ Graph</button>
           </div>
           <div className="hidden md:flex items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="status-dot" />
-              <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>
+              <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
                 {docs.length} doc{docs.length !== 1 ? 's' : ''} in vault
               </span>
             </div>
             <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
-            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>Powered by MindVault</span>
+            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>Powered by MindVault</span>
           </div>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto" style={{ padding: '24px 0' }}>
+        <div ref={scrollRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto" style={{ padding: '24px 0' }}>
           {messages.length === 0 ? (
             <EmptyState onSuggest={(q) => handleSend(q)} docs={docs} />
           ) : (
-            <div className="flex flex-col gap-6 max-w-3xl mx-auto px-4 md:px-6">
+            <div className="flex flex-col gap-7 max-w-3xl mx-auto px-4 md:px-6">
               {messages.map(msg => (
                 <MessageBubble key={msg.id} msg={msg} onConceptClick={handleViewGraph} />
               ))}
@@ -833,25 +764,21 @@ export default function Home() {
           )}
         </div>
 
-        {/* Input */}
-        <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px', background: 'var(--bg)' }}>
+        {/* Composer */}
+        <div className="composer-wrap">
           {attachedFile && (
-            <div className="max-w-3xl mx-auto" style={{ marginBottom: 8 }}>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                fontSize: 11, fontFamily: 'IBM Plex Mono', color: 'var(--accent)',
-                background: 'rgba(74,140,118,0.08)', border: '1px solid rgba(74,140,118,0.2)',
-                borderRadius: 6, padding: '4px 10px'
+            <div style={{ maxWidth: 760, margin: '0 auto 8px' }}>
+              <span className="chip" style={{
+                color: 'var(--accent)', background: 'rgba(61,127,104,0.08)', border: '1px solid rgba(61,127,104,0.2)'
               }}>
                 📎 {attachedFile.name}
-                <button onClick={() => setAttachedFile(null)}
-                  className="tap-target"
+                <button onClick={() => setAttachedFile(null)} className="tap-target"
                   style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 13, padding: 0 }}
                   title="Remove attachment">✕</button>
               </span>
             </div>
           )}
-          <div className="flex gap-2 items-end max-w-3xl mx-auto">
+          <div className="composer-card flex gap-1 items-end">
             <input ref={attachRef} type="file" className="hidden"
               accept=".pdf,.txt,.md,.docx,.doc,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff"
               onChange={(e) => {
@@ -859,24 +786,16 @@ export default function Home() {
                 if (f) setAttachedFile(f)
                 if (attachRef.current) attachRef.current.value = ''
               }} />
-            <button
-              onClick={() => attachRef.current?.click()}
-              disabled={loading || !sessionId}
-              title="Attach a file or image for this question"
-              style={{
-                flexShrink: 0, height: 46, width: 46, borderRadius: 10,
-                border: '1px solid var(--border)', background: 'var(--surface2)',
-                color: attachedFile ? 'var(--accent)' : 'var(--text3)',
-                fontSize: 16, cursor: 'pointer', display: 'flex',
-                alignItems: 'center', justifyContent: 'center'
-              }}>
+            <button onClick={() => attachRef.current?.click()} disabled={loading || !sessionId}
+              title="Attach a file or image for this question" className="icon-btn"
+              style={{ color: attachedFile ? 'var(--accent)' : 'var(--text3)' }}>
               📎
             </button>
             <div className="flex-1">
               <textarea ref={textareaRef} value={input} onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={attachedFile ? "Ask something about this file..." : "Ask your vault anything..."}
-                rows={1} className="vault-input" style={{ minHeight: 46, maxHeight: 140 }}
+                rows={1} className="vault-input" style={{ minHeight: 40, maxHeight: 140 }}
                 onInput={(e) => {
                   const t = e.target as HTMLTextAreaElement
                   t.style.height = 'auto'
@@ -887,7 +806,7 @@ export default function Home() {
               {loading ? <div className="spinner" style={{ width: 14, height: 14 }} /> : '→'}
             </button>
           </div>
-          <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textAlign: 'center', marginTop: 8, letterSpacing: '0.03em' }}>
+          <p className="eyebrow" style={{ textAlign: 'center', marginTop: 8, textTransform: 'none', letterSpacing: '0.02em' }}>
             {attachedFile ? 'Attachment used for this question only · Not saved to your vault' : 'Answers grounded in your documents · Encrypted · Private'}
           </p>
         </div>

@@ -258,11 +258,11 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
         flexShrink: 0,
       }}>
         <div style={{ flex: 1 }}>
-          <p style={{ fontFamily: 'Instrument Serif', fontSize: 16, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1 }}>
+          <p style={{ fontFamily: 'var(--serif)', fontSize: 16, fontStyle: 'italic', color: 'var(--text)', lineHeight: 1 }}>
             Knowledge Graph
           </p>
           {data && (
-            <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginTop: 2 }}>
+            <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)', marginTop: 2 }}>
               {data.nodes.length} nodes · {data.edges.length} edges · topic: {topic}
             </p>
           )}
@@ -306,7 +306,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
               padding: '7px 12px',
               fontSize: 12,
               color: 'var(--text)',
-              fontFamily: 'IBM Plex Mono',
+              fontFamily: 'var(--mono)',
               outline: 'none',
             }}
           />
@@ -319,19 +319,19 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
               borderRadius: 6,
               padding: '7px 14px',
               fontSize: 11,
-              fontFamily: 'IBM Plex Mono',
+              fontFamily: 'var(--mono)',
               cursor: 'pointer',
               fontWeight: 600,
             }}
           >Find</button>
         </div>
         {searchResult === 'not_found' && (
-          <p style={{ fontSize: 10, color: 'var(--danger)', fontFamily: 'IBM Plex Mono', marginTop: 5 }}>
+          <p style={{ fontSize: 10, color: 'var(--danger)', fontFamily: 'var(--mono)', marginTop: 5 }}>
             No matching node found. Try a shorter keyword.
           </p>
         )}
         {searchResult && searchResult !== 'not_found' && (
-          <p style={{ fontSize: 10, color: 'var(--accent3)', fontFamily: 'IBM Plex Mono', marginTop: 5 }}>
+          <p style={{ fontSize: 10, color: 'var(--accent3)', fontFamily: 'var(--mono)', marginTop: 5 }}>
             Found: "{searchResult}" — showing connected nodes
           </p>
         )}
@@ -342,13 +342,13 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 10 }}>
             <div className="spinner" />
-            <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>Building graph...</span>
+            <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>Building graph...</span>
           </div>
         ) : !data || nodes.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
             <p style={{ fontSize: 28 }}>🕸️</p>
             <p style={{ fontSize: 13, color: 'var(--text2)' }}>No graph data for "{topic}"</p>
-            <p style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>
+            <p style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
               Upload documents first to build the knowledge graph.
             </p>
           </div>
@@ -357,7 +357,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
             {/* Hint overlay */}
             <div style={{
               position: 'absolute', top: 10, left: 12, zIndex: 10,
-              fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono',
+              fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)',
               display: 'flex', flexDirection: 'column', gap: 2,
               pointerEvents: 'none',
             }}>
@@ -370,7 +370,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
             {/* Zoom indicator */}
             <div style={{
               position: 'absolute', bottom: 10, right: 12, zIndex: 10,
-              fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono',
+              fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)',
             }}>
               {Math.round(zoom * 100)}%
             </div>
@@ -451,7 +451,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
                       />
                       {isHighlighted && (
                         <text x={mx} y={my - 6} textAnchor="middle"
-                          style={{ fontSize: 8, fill: 'rgba(184,144,46,0.6)', fontFamily: 'IBM Plex Mono', pointerEvents: 'none' }}>
+                          style={{ fontSize: 8, fill: 'rgba(184,144,46,0.6)', fontFamily: 'var(--mono)', pointerEvents: 'none' }}>
                           {edge.relation.length > 18 ? edge.relation.slice(0, 17) + '…' : edge.relation}
                         </text>
                       )}
@@ -506,7 +506,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
                       {node.connections > 0 && (
                         <text x={node.x + r * 0.7} y={node.y - r * 0.7}
                           textAnchor="middle" dominantBaseline="middle"
-                          style={{ fontSize: 6, fill: 'rgba(184,144,46,0.8)', fontFamily: 'IBM Plex Mono', pointerEvents: 'none' }}>
+                          style={{ fontSize: 6, fill: 'rgba(184,144,46,0.8)', fontFamily: 'var(--mono)', pointerEvents: 'none' }}>
                           {node.connections}
                         </text>
                       )}
@@ -518,7 +518,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
                         style={{
                           fontSize: Math.max(7, Math.min(10, 100 / node.id.length)),
                           fill: isSelected || isSearch ? 'var(--accent)' : isHovered ? 'var(--text)' : 'var(--text2)',
-                          fontFamily: 'IBM Plex Mono',
+                          fontFamily: 'var(--mono)',
                           pointerEvents: 'none',
                           fontWeight: isSelected ? '600' : '400',
                         }}
@@ -530,7 +530,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
                       {node.sources.length > 1 && (
                         <text x={node.x} y={node.y + r + 10}
                           textAnchor="middle"
-                          style={{ fontSize: 7, fill: 'rgba(176,122,82,0.6)', fontFamily: 'IBM Plex Mono', pointerEvents: 'none' }}>
+                          style={{ fontSize: 7, fill: 'rgba(176,122,82,0.6)', fontFamily: 'var(--mono)', pointerEvents: 'none' }}>
                           {node.sources.length} sources
                         </text>
                       )}
@@ -552,7 +552,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
           background: 'rgba(184,144,46,0.04)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <p style={{ fontSize: 13, color: 'var(--accent)', fontFamily: 'IBM Plex Mono', fontWeight: 600 }}>
+            <p style={{ fontSize: 13, color: 'var(--accent)', fontFamily: 'var(--mono)', fontWeight: 600 }}>
               {selectedNode}
             </p>
             <button
@@ -564,7 +564,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
                 borderRadius: 5,
                 padding: '5px 12px',
                 fontSize: 10,
-                fontFamily: 'IBM Plex Mono',
+                fontFamily: 'var(--mono)',
                 cursor: 'pointer',
                 fontWeight: 600,
               }}
@@ -579,7 +579,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
               .filter(e => e.source === selectedNode || e.target === selectedNode)
               .slice(0, 5)
               .map((e, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontFamily: 'IBM Plex Mono' }}>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontFamily: 'var(--mono)' }}>
                   <span style={{ color: 'var(--accent3)' }}>{e.source}</span>
                   <span style={{ color: 'var(--text3)' }}>──[{e.relation}]──▶</span>
                   <span style={{ color: 'var(--accent2)' }}>{e.target}</span>
@@ -588,7 +588,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
             }
           </div>
 
-          <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', marginTop: 6 }}>
+          <p style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', marginTop: 6 }}>
             Double-click node to query · Drag to reposition
           </p>
         </div>
@@ -603,7 +603,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
         alignItems: 'center',
         flexShrink: 0,
       }}>
-        <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Legend</span>
+        <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Legend</span>
         <div style={{ display: 'flex', gap: 12 }}>
           {[
             { color: 'rgba(74,140,118,0.5)', label: 'Hub node' },
@@ -613,7 +613,7 @@ export default function GraphPanel({ open, topic, data, loading, onClose, onNode
           ].map((l, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: l.color, border: `1px solid ${l.color}` }} />
-              <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'IBM Plex Mono' }}>{l.label}</span>
+              <span style={{ fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{l.label}</span>
             </div>
           ))}
         </div>
@@ -636,6 +636,6 @@ const iconBtn: React.CSSProperties = {
   justifyContent: 'center',
   cursor: 'pointer',
   fontSize: 12,
-  fontFamily: 'IBM Plex Mono',
+  fontFamily: 'var(--mono)',
   flexShrink: 0,
 }
