@@ -35,22 +35,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center h-screen px-4" style={{ background: 'var(--bg)', position: 'relative', overflow: 'hidden' }}>
-      <div className="aura-bg"><span /><span /><span /></div>
-      <div className="tilt-card panel-block" style={{
+    <div className="flex items-center justify-center h-screen px-4" style={{ background: 'var(--bg)' }}>
+      <div style={{
+        background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--r-lg)',
         boxShadow: 'var(--shadow-md)',
         padding: 40,
         width: '100%',
-        maxWidth: 400,
-        position: 'relative',
-        zIndex: 1
+        maxWidth: 400
       }}>
         <div className="flex items-center gap-3 mb-8">
           <div className="logo-mark">M</div>
           <div>
-            <h1 className="gradient-text" style={{ fontFamily: 'var(--serif)', fontSize: 22, fontStyle: 'italic' }}>MindVault</h1>
+            <h1 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontStyle: 'italic', color: 'var(--text)' }}>MindVault</h1>
             <p className="eyebrow" style={{ textTransform: 'none', letterSpacing: 0 }}>knowledge · retrieved</p>
           </div>
         </div>
@@ -86,17 +84,17 @@ export default function LoginPage() {
           )}
 
           <button
-            className="action-btn"
+            className="btn-primary"
             onClick={handle}
             disabled={loading || !email || !password}
-            style={{ marginTop: 8, padding: '12px 0', fontSize: 13 }}
+            style={{ marginTop: 8 }}
           >
-            {loading ? 'Please wait...' : isSignup ? 'Create Account' : 'Sign In'}
+            {loading ? 'Please wait…' : isSignup ? 'Create account' : 'Sign in'}
           </button>
 
           <button
             onClick={() => { setIsSignup(!isSignup); setError(''); setMessage('') }}
-            style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4 }}
+            style={{ fontSize: 13, color: 'var(--text2)', background: 'none', border: 'none', cursor: 'pointer', marginTop: 4, textAlign: 'center' }}
           >
             {isSignup ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
           </button>

@@ -376,10 +376,10 @@ function EmptyState({ onSuggest, docs }: { onSuggest: (q: string) => void; docs:
   return (
     <div className="flex flex-col items-center justify-center h-full gap-8 px-6">
       <div className="text-center">
-        <p className="gradient-text" style={{ fontFamily: 'var(--serif)', fontSize: 38, fontStyle: 'italic', lineHeight: 1.1, marginBottom: 10 }}>
+        <p style={{ fontFamily: 'var(--serif)', fontSize: 38, fontStyle: 'italic', lineHeight: 1.1, marginBottom: 10, color: 'var(--text)' }}>
           What do you want<br />to know?
         </p>
-        <p style={{ fontSize: 14, color: 'var(--text3)', lineHeight: 1.6 }}>
+        <p style={{ fontSize: 15, color: 'var(--text2)', lineHeight: 1.6 }}>
           {docs.length === 0 ? 'Upload a document to get started.' : 'Ask anything from your uploaded documents.'}
         </p>
       </div>
@@ -513,8 +513,8 @@ function PreferencesModal({ initial, memoryNotes, onSave, onAddMemoryNote, onDel
           {dismissable && (
             <button className="action-btn" style={{ flex: 1 }} onClick={onClose}>Skip</button>
           )}
-          <button className="send-btn" style={{ flex: 1, width: 'auto', borderRadius: 'var(--r-sm)', fontSize: 13, fontWeight: 500 }}
-            onClick={() => onSave({ name, tone, priorities, system_prompt: systemPrompt, theme })}>Save</button>
+          <button className="btn-primary" style={{ flex: 1 }}
+            onClick={() => onSave({ name, tone, priorities, system_prompt: systemPrompt, theme })}>Save preferences</button>
         </div>
       </div>
     </div>
@@ -920,7 +920,6 @@ export default function Home() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <div className="aura-bg"><span /><span /><span /></div>
       <Sidebar
         docs={docs} onUpload={handleUpload} uploading={uploading} uploadStatus={uploadStatus}
         sessionId={sessionId} msgCount={messages.length}
@@ -954,7 +953,7 @@ export default function Home() {
         />
       )}
 
-      <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'color-mix(in srgb, var(--bg) 82%, transparent)' }}>
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0" style={{ background: 'var(--bg)' }}>
         {/* Top bar */}
         <div className="flex items-center justify-between px-4 py-3 gap-3 flex-wrap"
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg)' }}>
