@@ -352,6 +352,25 @@ Reply with ONLY one word:
 """)
     return router_prompt | llm | StrOutputParser()
 
+def _preference_hint(user_id: str = None) -> str:
+    """One-line instruction built from the user's onboarding preferences
+    (tone/depth/format), so answers match their stated style instead of a
+    single default voice. Empty string if the user never set preferences."""
+    if not user_id:
+        return ""
+    try:
+        from rag.memory import get_user_preferences
+        prefs = get_user_preferences(user_id)
+    except Exception:
+        return ""
+    if not prefs:
+        return ""
+    return (
+        f"User preference: respond in a {prefs.get('tone', 'neutral')} tone, "
+        f"at {prefs.get('depth', 'moderate')} depth, "
+        f"formatted as {prefs.get('format', 'prose')}."
+    )
+
 def build_retrieval_chain(mode: str = "default", user_id: str = None, document_ids: list = None):
     prompts = {
         "student": """You are helping a student prepare for exams.
@@ -386,8 +405,13 @@ Question: {question}
 Answer:"""
     }
 
+    system_prompt = prompts.get(mode, prompts["default"])
+    hint = _preference_hint(user_id)
+    if hint:
+        system_prompt = system_prompt.replace("\n\nContext:", f"\n\n{hint}\n\nContext:")
+
     prompt = ChatPromptTemplate.from_messages([
-        ("system", prompts.get(mode, prompts["default"])),
+        ("system", system_prompt),
         MessagesPlaceholder(variable_name="history"),
         ("human", "{question}"),
     ])
@@ -820,6 +844,9 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
         "default": f"{GROUNDING_RULE}\nBe clear and concise. Maximum 150 words.",
     }
     system_msg = mode_prompts.get(mode, mode_prompts["default"])
+    hint = _preference_hint(user_id)
+    if hint:
+        system_msg += f"\n{hint}"
     prompt = ChatPromptTemplate.from_template(
         system_msg + "\n\nContext: {context}\n\nQuestion: {question}\n\nAnswer:"
     )

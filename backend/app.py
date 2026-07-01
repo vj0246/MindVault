@@ -11,7 +11,8 @@ from rag.retrieve1 import query_rag, query_with_attachment, stream_rag
 from rag.memory import (
     get_session_history, save_session_message, clear_session_messages,
     list_chat_sessions, create_chat_session, rename_chat_session, delete_chat_session,
-    generate_share_token, get_shared_session, revoke_share_token
+    generate_share_token, get_shared_session, revoke_share_token,
+    get_user_preferences, save_user_preferences
 )
 from metadata.tracker import log_document, get_all_documents
 from graph.extractor import extract_entities_and_relations
@@ -129,6 +130,11 @@ async def upload_file(request: Request, file: UploadFile = File(...), background
 
 class RenameRequest(BaseModel):
     name: str
+
+class PreferencesRequest(BaseModel):
+    tone: str
+    depth: str
+    format: str
 
 class QueryRequest(BaseModel):
     question: str
@@ -506,6 +512,14 @@ def clear_session_messages_route(session_id: str, user=Depends(get_current_user)
 def delete_session_route(session_id: str, user=Depends(get_current_user)):
     delete_chat_session(session_id, str(user.id))
     return {"ok": True}
+
+@app.get("/preferences")
+def get_preferences_route(user=Depends(get_current_user)):
+    return {"preferences": get_user_preferences(str(user.id))}
+
+@app.post("/preferences")
+def save_preferences_route(body: PreferencesRequest, user=Depends(get_current_user)):
+    return save_user_preferences(str(user.id), body.tone, body.depth, body.format)
 
 @app.post("/sessions/{session_id}/share")
 def share_session(session_id: str, user=Depends(get_current_user)):
