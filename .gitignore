@@ -6,6 +6,7 @@ backend/rag/__pycache__/
 *.pyc
 frontend/node_modules/
 frontend/.next/
+frontend/tsconfig.tsbuildinfo
 .env
 .env.*
 **/.env
@@ -13,3 +14,10 @@ frontend/.next/
 
 # next build
 .next/
+
+# committed virtualenvs -- should never have been tracked (compiled
+# binaries with no provenance, ~12k files of repo bloat)
+backend/eval_env/
+mindvault/
+*.venv/
+venv/

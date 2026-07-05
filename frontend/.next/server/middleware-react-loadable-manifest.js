@@ -1,1 +1,0 @@
-self.__REACT_LOADABLE_MANIFEST="{\"app\\\\page.tsx -> ../lib/supabase\":{\"id\":\"app\\\\page.tsx -> ../lib/supabase\",\"files\":[]},\"lib\\\\api.ts -> ./supabase\":{\"id\":\"lib\\\\api.ts -> ./supabase\",\"files\":[]}}"
