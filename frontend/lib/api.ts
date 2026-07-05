@@ -172,23 +172,18 @@ export async function deleteMemoryNote(noteId: string) {
   return res.data
 }
 
-// Streaming query via SSE
-export function streamQuery(
-  question: string, sessionId: string, mode: string,
-  documentIds: string[], token: string,
+// Shared SSE line-reader -- both streamQuery (JSON body) and
+// streamQueryWithAttachment (multipart body) parse the exact same
+// meta/token/warning/done/error event shape, only the request differs.
+function readSSE(
+  res: Response,
   onMeta: (meta: any) => void,
   onToken: (text: string) => void,
   onDone: (data: any) => void,
-  onError: (err: string) => void
-): () => void {
-  const controller = new AbortController()
-
-  fetch(`${BASE}/query/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ question, session_id: sessionId, mode, document_ids: documentIds }),
-    signal: controller.signal,
-  }).then(async (res) => {
+  onError: (err: string) => void,
+  onWarning?: (message: string) => void
+) {
+  return (async () => {
     if (!res.ok) { onError(`HTTP ${res.status}`); return }
     const reader = res.body!.getReader()
     const decoder = new TextDecoder()
@@ -208,14 +203,67 @@ export function streamQuery(
           const evt = JSON.parse(json)
           if (evt.type === 'meta')  onMeta(evt)
           else if (evt.type === 'token') onToken(evt.text)
+          else if (evt.type === 'warning') onWarning?.(evt.message)
           else if (evt.type === 'done')  onDone(evt)
           else if (evt.type === 'error') onError(evt.message)
         } catch {}
       }
     }
-  }).catch((err) => {
-    if (err.name !== 'AbortError') onError(String(err))
-  })
+  })()
+}
+
+// Streaming query via SSE
+export function streamQuery(
+  question: string, sessionId: string, mode: string,
+  documentIds: string[], token: string,
+  onMeta: (meta: any) => void,
+  onToken: (text: string) => void,
+  onDone: (data: any) => void,
+  onError: (err: string) => void,
+  onWarning?: (message: string) => void
+): () => void {
+  const controller = new AbortController()
+
+  fetch(`${BASE}/query/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ question, session_id: sessionId, mode, document_ids: documentIds }),
+    signal: controller.signal,
+  }).then((res) => readSSE(res, onMeta, onToken, onDone, onError, onWarning))
+    .catch((err) => {
+      if (err.name !== 'AbortError') onError(String(err))
+    })
+
+  return () => controller.abort()
+}
+
+// Streaming attachment query via SSE (multipart body, same event shape as streamQuery)
+export function streamQueryWithAttachment(
+  question: string, sessionId: string, mode: string,
+  documentIds: string[], file: File, token: string,
+  onMeta: (meta: any) => void,
+  onToken: (text: string) => void,
+  onDone: (data: any) => void,
+  onError: (err: string) => void,
+  onWarning?: (message: string) => void
+): () => void {
+  const controller = new AbortController()
+  const form = new FormData()
+  form.append('file', file)
+  form.append('question', question)
+  form.append('session_id', sessionId)
+  form.append('mode', mode)
+  form.append('document_ids', JSON.stringify(documentIds))
+
+  fetch(`${BASE}/query-with-attachment/stream`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+    signal: controller.signal,
+  }).then((res) => readSSE(res, onMeta, onToken, onDone, onError, onWarning))
+    .catch((err) => {
+      if (err.name !== 'AbortError') onError(String(err))
+    })
 
   return () => controller.abort()
 }

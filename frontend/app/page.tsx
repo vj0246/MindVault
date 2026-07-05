@@ -7,8 +7,8 @@ import GraphPanel from '../components/GraphPanel'
 import {
   uploadDocument,
   queryKnowledge,
-  queryWithAttachment,
   streamQuery,
+  streamQueryWithAttachment,
   shareSession,
   unshareSession,
   getDocuments,
@@ -43,6 +43,8 @@ interface Message {
   intent?: Intent
   related_concepts?: { id: string; sources: string[] }[]
   timestamp: string
+  answer_type?: 'grounded' | 'general_knowledge'
+  unverified?: boolean
 }
 
 interface Doc {
@@ -215,8 +217,18 @@ function MessageBubble({ msg, onConceptClick }: {
       <div className="flex items-center gap-2 mb-2">
         <span className="eyebrow" style={{ fontFamily: 'var(--mono)', textTransform: 'none', letterSpacing: 0, color: 'var(--text3)' }}>MindVault</span>
         {msg.intent && <IntentPill intent={msg.intent} />}
+        {msg.answer_type === 'general_knowledge' && (
+          <span className="eyebrow" style={{ textTransform: 'none', letterSpacing: 0, color: 'var(--accent2)', border: '1px solid var(--accent2)', borderRadius: 999, padding: '1px 8px' }}>
+            General knowledge — not from your documents
+          </span>
+        )}
       </div>
-      <div className="md"><ReactMarkdown>{msg.content}</ReactMarkdown></div>
+      <div className="md"><ReactMarkdown>{msg.content.replace(/^\[General knowledge\]\s*\n*/, '')}</ReactMarkdown></div>
+      {msg.unverified && (
+        <p className="eyebrow" style={{ marginTop: 6, textTransform: 'none', letterSpacing: 0, color: 'var(--danger)' }}>
+          ⚠ This answer may not be fully supported by your uploaded documents.
+        </p>
+      )}
       {msg.sources && msg.sources.length > 0 && msg.sources[0] !== 'conversation history' && (
         <div className="mt-3 flex flex-wrap gap-1 items-center">
           {msg.sources.map((s, i) => <span key={i} className="source-chip">📄 {s}</span>)}
@@ -816,62 +828,51 @@ export default function Home() {
     setLoading(true)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
-    if (fileToSend) {
-      try {
-        const result = await queryWithAttachment(question, sessionId, mode, selectedDocs, fileToSend)
-        setMessages(prev => prev.map(m => m.id === assistantId ? {
-          ...m,
-          content: result.answer || 'No answer returned.',
-          sources: result.sources || [],
-          chunks: result.chunks || [],
-          confidence: result.confidence ?? undefined,
-          intent: result.intent,
-          related_concepts: result.related_concepts || [],
-        } : m))
-      } catch {
-        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: 'Could not reach MindVault. Please try again.' } : m))
-        showToast('Backend unreachable', 'error')
-      } finally { setLoading(false) }
-      return
-    }
-
     const { getSupabase: _sb } = await import('../lib/supabase')
     const { data: { session: _session } } = await _sb().auth.getSession()
     const token = _session?.access_token || ''
 
-    const cancel = streamQuery(
-      question, sessionId, mode, selectedDocs, token,
-      (meta) => {
-        setMessages(prev => prev.map(m => m.id === assistantId ? {
-          ...m,
-          sources: meta.sources || [],
-          chunks: meta.chunks || [],
-          confidence: meta.confidence ?? undefined,
-          intent: meta.intent,
-        } : m))
+    const onMeta = (meta: any) => {
+      setMessages(prev => prev.map(m => m.id === assistantId ? {
+        ...m,
+        sources: meta.sources || [],
+        chunks: meta.chunks || [],
+        confidence: meta.confidence ?? undefined,
+        intent: meta.intent,
+        answer_type: meta.answer_type,
+      } : m))
+      if (!fileToSend) {
         const activeSession = sessions.find(s => s.id === sessionId)
         if (!activeSession || activeSession.name === 'New Chat') {
           renameSession(sessionId, question.slice(0, 45)).then(() => loadSessions()).catch(() => {})
         }
-      },
-      (tokenText) => {
-        setMessages(prev => prev.map(m => m.id === assistantId
-          ? { ...m, content: (m.content || '') + tokenText }
-          : m))
-      },
-      (done) => {
-        setMessages(prev => prev.map(m => m.id === assistantId ? {
-          ...m,
-          related_concepts: done.related_concepts || [],
-        } : m))
-        setLoading(false)
-      },
-      (err) => {
-        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: `Error: ${err}` } : m))
-        showToast('Stream failed', 'error')
-        setLoading(false)
       }
-    )
+    }
+    const onToken = (tokenText: string) => {
+      setMessages(prev => prev.map(m => m.id === assistantId
+        ? { ...m, content: (m.content || '') + tokenText }
+        : m))
+    }
+    const onWarning = (message: string) => {
+      setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, unverified: true } : m))
+    }
+    const onDone = (done: any) => {
+      setMessages(prev => prev.map(m => m.id === assistantId ? {
+        ...m,
+        related_concepts: done.related_concepts || [],
+        answer_type: done.answer_type ?? m.answer_type,
+      } : m))
+      setLoading(false)
+    }
+    const onError = (err: string) => {
+      setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: `Error: ${err}` } : m))
+      showToast('Stream failed', 'error')
+      setLoading(false)
+    }
+
+    const cancel = fileToSend
+      ? streamQueryWithAttachment(question, sessionId, mode, selectedDocs, fileToSend, token, onMeta, onToken, onDone, onError, onWarning)
+      : streamQuery(question, sessionId, mode, selectedDocs, token, onMeta, onToken, onDone, onError, onWarning)
 
     return cancel
   }, [input, loading, mode, sessionId, attachedFile, selectedDocs, sessions])

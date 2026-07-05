@@ -8,7 +8,8 @@ import re
 import uuid
 from rag.db import get_supabase
 from rag.ingest import ingest_document, load_document, load_image_via_groq, IMAGE_EXTENSIONS
-from rag.retrieve1 import query_rag, query_with_attachment, stream_rag
+from rag.retrieve1 import query_rag, query_with_attachment, stream_rag, stream_with_attachment
+from rag.cache import invalidate_has_chunks
 from rag.memory import (
     get_session_history, save_session_message, clear_session_messages,
     list_chat_sessions, create_chat_session, rename_chat_session, delete_chat_session,
@@ -163,6 +164,11 @@ async def upload_file(request: Request, file: UploadFile = File(...), background
         sb.table("documents").update(
             {"chunk_count": len(chunks)}
         ).eq("id", actual_document_id).execute()
+
+        # A successful upload just changed the answer to "does this user have
+        # any documents" -- clear the short-TTL cache immediately so the
+        # very next query never sees a stale "no documents" result.
+        invalidate_has_chunks(str(user.id))
 
         # Graph extraction runs AFTER the response is sent -- up to 10
         # sequential Groq calls here were adding 10-30s to upload latency
@@ -419,6 +425,103 @@ async def query_with_attachment_route(
         import traceback
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/query-with-attachment/stream")
+async def query_with_attachment_stream_route(
+    request: Request,
+    file: UploadFile = File(...),
+    question: str = Form(...),
+    session_id: str = Form("default_session"),
+    mode: str = Form("default"),
+    document_ids: str = Form("[]"),
+    user=Depends(get_current_user)
+):
+    """Streaming (SSE) counterpart to /query-with-attachment -- same
+    validation/extraction, progressive token rendering instead of one
+    blocking response like /query/stream is to /query."""
+    import json
+    import tempfile
+
+    if not question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty.")
+
+    enforce_rate_limit("query", str(user.id), request.client.host, QUERY_RATE_LIMIT)
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    ALLOWED = {".pdf", ".txt", ".md", ".docx", ".doc", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}
+    if ext not in ALLOWED:
+        raise HTTPException(status_code=400, detail=f"Unsupported attachment type: {ext}")
+
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Attached file is empty.")
+
+    try:
+        doc_ids = json.loads(document_ids) if document_ids else []
+    except Exception:
+        doc_ids = []
+
+    history = get_session_history(session_id, user_id=str(user.id))
+
+    async def event_generator():
+        full_answer = ""
+        mod = moderate_input(question)
+        if mod["flagged"]:
+            refusal = f"I can't help with that request. {mod['reason']}".strip()
+            user_msg = f"[Attached: {file.filename}] {question}"
+            yield f'data: {json.dumps({"type": "meta", "sources": [], "intent": "blocked", "confidence": 0.0, "chunks": []})}\n\n'
+            yield f'data: {json.dumps({"type": "token", "text": refusal})}\n\n'
+            yield f'data: {json.dumps({"type": "done", "related_concepts": [], "full_answer": refusal})}\n\n'
+            save_session_message(session_id, role="user", content=user_msg, user_id=str(user.id))
+            save_session_message(session_id, role="assistant", content=refusal, user_id=str(user.id))
+            return
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        try:
+            if ext in IMAGE_EXTENSIONS:
+                docs = load_image_via_groq(tmp_path)
+            else:
+                docs = load_document(tmp_path)
+            ATTACHMENT_CHAR_BUDGET = 6000
+            parts = []
+            total_len = 0
+            for d in docs:
+                parts.append(d.page_content)
+                total_len += len(d.page_content)
+                if total_len >= ATTACHMENT_CHAR_BUDGET:
+                    break
+            attachment_text = "\n\n".join(parts)
+        finally:
+            os.unlink(tmp_path)
+
+        try:
+            for event in stream_with_attachment(
+                question=question,
+                attachment_text=attachment_text,
+                attachment_name=file.filename,
+                history=history,
+                mode=mode,
+                user_id=str(user.id),
+                document_ids=doc_ids or None,
+                langsmith_extra={"metadata": {"user_id": str(user.id), "session_id": session_id, "mode": mode, "has_attachment": True}}
+            ):
+                if '"type": "done"' in event:
+                    data = json.loads(event.replace("data: ", "").strip())
+                    full_answer = data.get("full_answer", "")
+                yield event
+        except Exception as e:
+            yield f'data: {json.dumps({"type": "error", "message": str(e)})}\n\n'
+
+        if full_answer:
+            user_msg = f"[Attached: {file.filename}] {question}"
+            save_session_message(session_id, role="user", content=user_msg, user_id=str(user.id))
+            save_session_message(session_id, role="assistant", content=full_answer, user_id=str(user.id))
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 @app.get("/documents")
 def list_documents(user=Depends(get_current_user)):

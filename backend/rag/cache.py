@@ -1,5 +1,6 @@
 import hashlib
 import json
+import time
 from datetime import datetime, timezone, timedelta
 from rag.db import get_supabase
 
@@ -12,6 +13,37 @@ except ImportError:
         return decorator if not (args and callable(args[0])) else args[0]
 
 CACHE_TTL_HOURS = 12
+
+# ── "Does this user have any documents at all" existence check ─────────────
+# query_rag/stream_rag both hit Supabase for this on every single call just
+# to decide whether to show the "no documents uploaded" message. It rarely
+# changes, so a short in-process TTL cache turns that into a Supabase round
+# trip roughly once a minute per user instead of once per message. Uploads
+# call invalidate_has_chunks() immediately so a fresh upload is never masked
+# by a stale cached "no documents" result.
+_HAS_CHUNKS_TTL_SECONDS = 60
+_has_chunks_cache: dict[str, tuple[bool, float]] = {}
+
+
+def has_any_chunks(user_id: str | None) -> bool:
+    key = user_id or "__anonymous__"
+    cached = _has_chunks_cache.get(key)
+    now = time.monotonic()
+    if cached and cached[1] > now:
+        return cached[0]
+
+    supabase = get_supabase()
+    query = supabase.table("chunks").select("id")
+    if user_id:
+        query = query.eq("user_id", user_id)
+    result = query.limit(1).execute()
+    value = bool(result.data)
+    _has_chunks_cache[key] = (value, now + _HAS_CHUNKS_TTL_SECONDS)
+    return value
+
+
+def invalidate_has_chunks(user_id: str) -> None:
+    _has_chunks_cache.pop(user_id, None)
 
 def make_cache_key(question: str, user_id: str, document_ids: list, mode: str) -> str:
     """Deterministic key from everything that affects the answer.
