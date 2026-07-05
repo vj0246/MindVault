@@ -6,8 +6,7 @@ from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2t
 from langchain_core.documents import Document
 from rag.embedder import EMBED_MODEL
 from rag.db import get_supabase
-from groq import Groq
-from security.groq_keys import call_with_key_fallback
+from security.groq_keys import call_with_key_fallback, get_client
 from dotenv import load_dotenv
 
 try:
@@ -67,13 +66,6 @@ def load_document(file_path: str) -> list:
         raise ValueError(f"Unsupported file type: {ext}")
 
 
-_OCR_CLIENTS = {}
-
-def _get_ocr_client(key: str):
-    if key not in _OCR_CLIENTS:
-        _OCR_CLIENTS[key] = Groq(api_key=key)
-    return _OCR_CLIENTS[key]
-
 @traceable(name="ingest_image_ocr", run_type="llm")
 def load_image_via_groq(file_path: str) -> list:
     ext = os.path.splitext(file_path)[1].lower()
@@ -82,7 +74,7 @@ def load_image_via_groq(file_path: str) -> list:
         image_data = base64.standard_b64encode(f.read()).decode("utf-8")
 
     def _call(key):
-        client = _get_ocr_client(key)
+        client = get_client(key)
         return client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=[{"role": "user", "content": [

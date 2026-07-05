@@ -1,6 +1,16 @@
 import os
+from groq import Groq
 
 _KEYS = None
+_CLIENTS = {}
+
+
+def get_client(key: str) -> Groq:
+    """One raw Groq SDK client per key, cached -- avoids opening a fresh
+    httpx connection pool per call across every module that needs one."""
+    if key not in _CLIENTS:
+        _CLIENTS[key] = Groq(api_key=key)
+    return _CLIENTS[key]
 
 
 def get_groq_keys() -> list:

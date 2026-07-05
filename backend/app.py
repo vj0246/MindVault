@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Dep
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 import re
 import uuid
@@ -27,6 +27,20 @@ from dotenv import load_dotenv
 # secondary backstop against one IP running many accounts.
 QUERY_RATE_LIMIT = 100
 UPLOAD_RATE_LIMIT = 20
+SESSION_RATE_LIMIT = 30
+EXPORT_RATE_LIMIT = 30
+MEMORY_RATE_LIMIT = 60
+SHARE_RATE_LIMIT = 30
+
+# Client-controlled input caps -- everything here ends up either in an LLM
+# prompt (cost/latency abuse) or a DB row (storage abuse) if left unbounded.
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25MB
+QUESTION_MAX_CHARS = 8000
+MEMORY_NOTE_MAX_CHARS = 500
+PREFERENCE_NAME_MAX_CHARS = 100
+PREFERENCE_TONE_MAX_CHARS = 100
+PREFERENCE_SYSTEM_PROMPT_MAX_CHARS = 1000
+PREFERENCE_MAX_PRIORITIES = 10
 
 load_dotenv()
 
@@ -108,9 +122,18 @@ async def upload_file(request: Request, file: UploadFile = File(...), background
         if not safe_stem or safe_stem in (".", ".."):
             raise HTTPException(status_code=400, detail="Invalid filename.")
 
+        # Content-Length is client-supplied and spoofable -- it's a cheap
+        # early rejection, not the real guard. The real guard is the capped
+        # read below, so a lying/missing header can never bypass the limit.
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="File too large (max 25MB).")
+
         os.makedirs("data/docs", exist_ok=True)
         file_path = f"data/docs/{uuid.uuid4()}_{safe_stem}"
-        contents = await file.read()
+        contents = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(contents) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="File too large (max 25MB).")
         if not contents:
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
         with open(file_path, "wb") as buffer:
@@ -162,20 +185,20 @@ async def upload_file(request: Request, file: UploadFile = File(...), background
         raise HTTPException(status_code=500, detail=str(e))
 
 class RenameRequest(BaseModel):
-    name: str
+    name: str = Field(..., max_length=60)
 
 class PreferencesRequest(BaseModel):
-    name: str
-    tone: str
-    priorities: list[str]
-    system_prompt: str
-    theme: str
+    name: str = Field("", max_length=PREFERENCE_NAME_MAX_CHARS)
+    tone: str = Field("", max_length=PREFERENCE_TONE_MAX_CHARS)
+    priorities: list[str] = Field(default_factory=list, max_length=PREFERENCE_MAX_PRIORITIES)
+    system_prompt: str = Field("", max_length=PREFERENCE_SYSTEM_PROMPT_MAX_CHARS)
+    theme: str = "Light"
 
 class MemoryNoteRequest(BaseModel):
-    content: str
+    content: str = Field(..., max_length=MEMORY_NOTE_MAX_CHARS)
 
 class QueryRequest(BaseModel):
-    question: str
+    question: str = Field(..., max_length=QUESTION_MAX_CHARS)
     mode: str = "default"
     session_id: str = "default_session"
     document_ids: list = []
@@ -229,6 +252,8 @@ def query(req: QueryRequest, request: Request, user=Depends(get_current_user)):
             "intent": result.get("intent", "answer"),
             "related_concepts": result.get("related_concepts", [])
         }
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print(traceback.format_exc())
@@ -470,8 +495,9 @@ def _build_session_pdf(history: list, session_label: str) -> bytes:
 
 
 @app.post("/export")
-def export_session(req: ExportRequest, user=Depends(get_current_user)):
+def export_session(req: ExportRequest, request: Request, user=Depends(get_current_user)):
     try:
+        enforce_rate_limit("export", str(user.id), request.client.host, EXPORT_RATE_LIMIT)
         history = get_session_history(req.session_id, user_id=str(user.id))
 
         # Look up the session's clean sequential number + name for display.
@@ -515,6 +541,8 @@ def export_session(req: ExportRequest, user=Depends(get_current_user)):
 
         report = "\n".join(lines)
         return {"report": report, "session_id": req.session_id}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -525,7 +553,8 @@ def list_sessions_route(user=Depends(get_current_user)):
     return {"sessions": list_chat_sessions(str(user.id))}
 
 @app.post("/sessions")
-def create_session_route(user=Depends(get_current_user)):
+def create_session_route(request: Request, user=Depends(get_current_user)):
+    enforce_rate_limit("session_create", str(user.id), request.client.host, SESSION_RATE_LIMIT)
     session_id = str(uuid.uuid4())
     session = create_chat_session(session_id, str(user.id))
     return {"session_id": session_id, "name": session["name"]}
@@ -556,7 +585,16 @@ def get_preferences_route(user=Depends(get_current_user)):
     return {"preferences": get_user_preferences(str(user.id))}
 
 @app.post("/preferences")
-def save_preferences_route(body: PreferencesRequest, user=Depends(get_current_user)):
+def save_preferences_route(body: PreferencesRequest, request: Request, user=Depends(get_current_user)):
+    enforce_rate_limit("preferences_save", str(user.id), request.client.host, MEMORY_RATE_LIMIT)
+    # Custom system_prompt is spliced into the LLM's system role on every
+    # future query (see rag/retrieve1.py:_preference_hint) -- it must clear
+    # the same moderation bar as a live question, or a user could plant a
+    # one-time jailbreak that silently applies to every answer afterward.
+    if body.system_prompt.strip():
+        mod = moderate_input(body.system_prompt)
+        if mod["flagged"]:
+            raise HTTPException(status_code=400, detail=f"Custom instructions rejected: {mod['reason']}")
     return save_user_preferences(str(user.id), body.name, body.tone, body.priorities, body.system_prompt, body.theme)
 
 @app.get("/memory")
@@ -564,9 +602,10 @@ def list_memory_route(user=Depends(get_current_user)):
     return {"notes": list_memory_notes(str(user.id))}
 
 @app.post("/memory")
-def add_memory_route(body: MemoryNoteRequest, user=Depends(get_current_user)):
+def add_memory_route(body: MemoryNoteRequest, request: Request, user=Depends(get_current_user)):
     if not body.content.strip():
         raise HTTPException(status_code=400, detail="Note cannot be empty.")
+    enforce_rate_limit("memory_add", str(user.id), request.client.host, MEMORY_RATE_LIMIT)
     return add_memory_note(str(user.id), body.content.strip())
 
 @app.delete("/memory/{note_id}")
@@ -575,8 +614,9 @@ def delete_memory_route(note_id: str, user=Depends(get_current_user)):
     return {"ok": True}
 
 @app.post("/sessions/{session_id}/share")
-def share_session(session_id: str, user=Depends(get_current_user)):
+def share_session(session_id: str, request: Request, user=Depends(get_current_user)):
     try:
+        enforce_rate_limit("share_create", str(user.id), request.client.host, SHARE_RATE_LIMIT)
         token = generate_share_token(session_id, str(user.id))
         base_url = os.environ.get("FRONTEND_URL", "").rstrip("/")
         if not base_url:
@@ -585,6 +625,8 @@ def share_session(session_id: str, user=Depends(get_current_user)):
         share_url = f"{base_url}/share/{token}"
         print(f"[Share] Generated share URL: {share_url}")
         return {"share_url": share_url, "token": token}
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print(f"[Share] ERROR: {traceback.format_exc()}")
@@ -596,8 +638,11 @@ def unshare_session(session_id: str, user=Depends(get_current_user)):
     return {"ok": True}
 
 @app.get("/share/{token}")
-def get_shared_session_route(token: str):
-    """Public endpoint — no auth required."""
+def get_shared_session_route(token: str, request: Request):
+    """Public endpoint — no auth required. Rate-limited per-IP since there's
+    no user_id to key on (reuses the same helper as authed routes by passing
+    the IP as both identifiers -- both checks collapse to one per-IP limit)."""
+    enforce_rate_limit("share_view", request.client.host, request.client.host, SHARE_RATE_LIMIT)
     data = get_shared_session(token)
     if not data:
         raise HTTPException(status_code=404, detail="Shared session not found or access revoked.")
