@@ -7,6 +7,7 @@ from langchain_core.documents import Document
 from rag.embedder import EMBED_MODEL
 from rag.db import get_supabase
 from groq import Groq
+from security.groq_keys import call_with_key_fallback
 from dotenv import load_dotenv
 
 try:
@@ -66,25 +67,35 @@ def load_document(file_path: str) -> list:
         raise ValueError(f"Unsupported file type: {ext}")
 
 
+_OCR_CLIENTS = {}
+
+def _get_ocr_client(key: str):
+    if key not in _OCR_CLIENTS:
+        _OCR_CLIENTS[key] = Groq(api_key=key)
+    return _OCR_CLIENTS[key]
+
 @traceable(name="ingest_image_ocr", run_type="llm")
 def load_image_via_groq(file_path: str) -> list:
     ext = os.path.splitext(file_path)[1].lower()
     mime_type = IMAGE_MIME.get(ext, "image/jpeg")
     with open(file_path, "rb") as f:
         image_data = base64.standard_b64encode(f.read()).decode("utf-8")
-    client = Groq(api_key=os.environ["GROQ_API_KEY"])
-    response = client.chat.completions.create(
-        model="meta-llama/llama-4-scout-17b-16e-instruct",
-        messages=[{"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_data}"}},
-            {"type": "text", "text": (
-                "Extract all content from this image in full detail. "
-                "If it contains text or notes, transcribe exactly. "
-                "If it contains diagrams, charts, or tables, describe them thoroughly."
-            )}
-        ]}],
-        max_tokens=2000
-    )
+
+    def _call(key):
+        client = _get_ocr_client(key)
+        return client.chat.completions.create(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=[{"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_data}"}},
+                {"type": "text", "text": (
+                    "Extract all content from this image in full detail. "
+                    "If it contains text or notes, transcribe exactly. "
+                    "If it contains diagrams, charts, or tables, describe them thoroughly."
+                )}
+            ]}],
+            max_tokens=2000
+        )
+    response = call_with_key_fallback(_call)
     extracted = response.choices[0].message.content
     print(f"[Ingest] Image extracted via Groq: {len(extracted)} chars")
     return [Document(page_content=extracted, metadata={"source": os.path.basename(file_path), "type": "image"})]

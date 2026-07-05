@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import os
+import re
 import uuid
 from rag.db import get_supabase
 from rag.ingest import ingest_document, load_document, load_image_via_groq, IMAGE_EXTENSIONS
@@ -29,16 +30,40 @@ UPLOAD_RATE_LIMIT = 20
 
 load_dotenv()
 
+# Known frontend origins, plus ALLOWED_ORIGINS (comma-separated) for extra
+# deploy previews/custom domains without a code change. Auth is Bearer-token
+# (not cookies) so a wildcard wasn't a credential-theft vector, but pinning
+# to known origins is still tighter than accepting any site.
+_DEFAULT_ORIGINS = [
+    "https://mind-vault-psi.vercel.app",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+_extra_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+frontend_url = os.environ.get("FRONTEND_URL", "").rstrip("/")
+ALLOWED_ORIGINS = list(dict.fromkeys(_DEFAULT_ORIGINS + _extra_origins + ([frontend_url] if frontend_url else [])))
+
 app = FastAPI(title="MindVault API")
 security = HTTPBearer(auto_error=False)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -76,8 +101,15 @@ async def upload_file(request: Request, file: UploadFile = File(...), background
         if ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
 
+        # Client-supplied filename -- take the basename only (drops any
+        # ../ or absolute-path components) and strip to safe characters
+        # before it ever touches a filesystem path.
+        safe_stem = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(file.filename))
+        if not safe_stem or safe_stem in (".", ".."):
+            raise HTTPException(status_code=400, detail="Invalid filename.")
+
         os.makedirs("data/docs", exist_ok=True)
-        file_path = f"data/docs/{file.filename}"
+        file_path = f"data/docs/{uuid.uuid4()}_{safe_stem}"
         contents = await file.read()
         if not contents:
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
@@ -581,11 +613,11 @@ def get_graph_all(user=Depends(get_current_user)):
 
 @app.options("/{rest_of_path:path}")
 async def preflight_handler(rest_of_path: str, request: Request):
-    return JSONResponse(
-        content={},
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
+    origin = request.headers.get("origin", "")
+    headers = {
+        "Access-Control-Allow-Methods": "POST, GET, DELETE, PATCH, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    }
+    if origin in ALLOWED_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+    return JSONResponse(content={}, headers=headers)

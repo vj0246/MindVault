@@ -9,6 +9,7 @@ from langchain.schema.messages import HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from graph.store import get_related_nodes
 from rag.cache import make_cache_key, get_cached, set_cached
+from security.groq_keys import get_groq_keys
 from dotenv import load_dotenv
 
 try:
@@ -68,22 +69,20 @@ def get_llm(temperature: float = 0.0):
     # FALLBACK: if 70b hits a rate limit (separate daily token pool per model
     # on Groq), automatically retry on 8b-instant instead of failing the
     # whole request. Each model has its own TPD quota, so this gives
-    # effectively 2x headroom during traffic spikes.
+    # effectively 2x headroom during traffic spikes. Same chain also carries
+    # one ChatGroq per configured GROQ_API_KEY, so a key that's rate-limited
+    # or over quota falls through to the next key (falls back to a single
+    # key transparently if only one is configured).
     #
     # Only 2 distinct temperatures are used (0.0, 0.15) -> cache by temperature
     # so each ChatGroq/httpx client pair is created ONCE and reused.
     if temperature not in _LLM_CACHE:
-        primary = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=temperature,
-            api_key=os.environ["GROQ_API_KEY"]
-        )
-        fallback = ChatGroq(
-            model="llama-3.1-8b-instant",
-            temperature=temperature,
-            api_key=os.environ["GROQ_API_KEY"]
-        )
-        _LLM_CACHE[temperature] = primary.with_fallbacks([fallback])
+        candidates = []
+        for key in get_groq_keys():
+            candidates.append(ChatGroq(model="llama-3.3-70b-versatile", temperature=temperature, api_key=key))
+            candidates.append(ChatGroq(model="llama-3.1-8b-instant", temperature=temperature, api_key=key))
+        primary, *fallbacks = candidates
+        _LLM_CACHE[temperature] = primary.with_fallbacks(fallbacks) if fallbacks else primary
     return _LLM_CACHE[temperature]
 
 

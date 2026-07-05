@@ -2,19 +2,19 @@ import os
 import re
 import json
 from groq import Groq
+from security.groq_keys import call_with_key_fallback
 
 # openai/gpt-oss-safeguard-20b -- replaces meta-llama/llama-guard-4-12b
 # (deprecated by Groq Feb 10 2026). Policy-following safety classifier:
 # bring-your-own-policy instead of a fixed taxonomy, single call covers
 # both harmful-content moderation and prompt-injection detection.
 
-_GUARD_CLIENT = None
+_GUARD_CLIENTS = {}
 
-def _get_client():
-    global _GUARD_CLIENT
-    if _GUARD_CLIENT is None:
-        _GUARD_CLIENT = Groq(api_key=os.environ["GROQ_API_KEY"])
-    return _GUARD_CLIENT
+def _get_client(key: str):
+    if key not in _GUARD_CLIENTS:
+        _GUARD_CLIENTS[key] = Groq(api_key=key)
+    return _GUARD_CLIENTS[key]
 
 POLICY = """# MindVault Input Safety Policy
 
@@ -57,15 +57,17 @@ def moderate_input(text: str) -> dict:
     Fails OPEN on any error -- moderation outages should never block the
     product; the existing STRICT RULE grounding prompt remains the backstop."""
     try:
-        client = _get_client()
-        resp = client.chat.completions.create(
-            model="openai/gpt-oss-safeguard-20b",
-            messages=[
-                {"role": "system", "content": POLICY},
-                {"role": "user", "content": (text or "")[:2000]}
-            ],
-            temperature=0,
-        )
+        def _call(key):
+            client = _get_client(key)
+            return client.chat.completions.create(
+                model="openai/gpt-oss-safeguard-20b",
+                messages=[
+                    {"role": "system", "content": POLICY},
+                    {"role": "user", "content": (text or "")[:2000]}
+                ],
+                temperature=0,
+            )
+        resp = call_with_key_fallback(_call)
         raw = resp.choices[0].message.content or ""
         cleaned = re.sub(r"```json|```", "", raw).strip()
         data = json.loads(cleaned)

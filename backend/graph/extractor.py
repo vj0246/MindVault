@@ -1,6 +1,7 @@
 from langchain_groq import ChatGroq
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from security.groq_keys import get_groq_keys
 from dotenv import load_dotenv
 import json
 import re
@@ -13,14 +14,17 @@ _EXTRACTOR_LLM = None
 def _get_extractor_llm():
     # Cached singleton -- was creating a new ChatGroq (+ httpx pool) on every
     # call. Upload loops this up to 10x, so 10 fresh connection pools per
-    # upload. Reuse one instance instead.
+    # upload. Reuse one instance instead. Chains one ChatGroq per configured
+    # GROQ_API_KEY via with_fallbacks() so a rate-limited/exhausted key falls
+    # through to the next (no-op with a single key).
     global _EXTRACTOR_LLM
     if _EXTRACTOR_LLM is None:
-        _EXTRACTOR_LLM = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=0,
-            api_key=os.environ["GROQ_API_KEY"]
-        )
+        candidates = [
+            ChatGroq(model="llama-3.3-70b-versatile", temperature=0, api_key=key)
+            for key in get_groq_keys()
+        ]
+        primary, *fallbacks = candidates
+        _EXTRACTOR_LLM = primary.with_fallbacks(fallbacks) if fallbacks else primary
     return _EXTRACTOR_LLM
 
 def extract_entities_and_relations(text: str, source: str) -> dict:
