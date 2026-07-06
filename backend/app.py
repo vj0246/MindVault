@@ -15,9 +15,10 @@ from rag.memory import (
     list_chat_sessions, create_chat_session, rename_chat_session, delete_chat_session,
     generate_share_token, get_shared_session, revoke_share_token,
     get_user_preferences, save_user_preferences,
-    list_memory_notes, add_memory_note, delete_memory_note
+    list_memory_notes, add_memory_note, delete_memory_note,
+    search_messages
 )
-from metadata.tracker import log_document, get_all_documents
+from metadata.tracker import log_document, get_all_documents, set_document_folder
 from graph.extractor import extract_entities_and_relations
 from graph.store import add_to_graph, get_related_nodes, get_full_graph
 from security.rate_limit import enforce_rate_limit
@@ -32,6 +33,8 @@ SESSION_RATE_LIMIT = 30
 EXPORT_RATE_LIMIT = 30
 MEMORY_RATE_LIMIT = 60
 SHARE_RATE_LIMIT = 30
+SEARCH_RATE_LIMIT = 30
+FOLDER_MAX_CHARS = 60
 
 # Client-controlled input caps -- everything here ends up either in an LLM
 # prompt (cost/latency abuse) or a DB row (storage abuse) if left unbounded.
@@ -256,7 +259,9 @@ def query(req: QueryRequest, request: Request, user=Depends(get_current_user)):
             "confidence": result.get("confidence", 0.0),
             "mode": req.mode,
             "intent": result.get("intent", "answer"),
-            "related_concepts": result.get("related_concepts", [])
+            "related_concepts": result.get("related_concepts", []),
+            "answer_type": result.get("answer_type", "grounded"),
+            "tokens": result.get("tokens", {"message": None, "daily_used": 0, "daily_pct": 0})
         }
     except HTTPException:
         raise
@@ -527,6 +532,15 @@ async def query_with_attachment_stream_route(
 def list_documents(user=Depends(get_current_user)):
     return {"documents": get_all_documents(user_id=str(user.id))}
 
+class FolderRequest(BaseModel):
+    folder: str | None = Field(None, max_length=FOLDER_MAX_CHARS)
+
+@app.patch("/documents/{document_id}/folder")
+def set_document_folder_route(document_id: str, body: FolderRequest, user=Depends(get_current_user)):
+    folder = body.folder.strip() if body.folder and body.folder.strip() else None
+    set_document_folder(document_id, str(user.id), folder)
+    return {"ok": True, "folder": folder}
+
 def _build_session_pdf(history: list, session_label: str) -> bytes:
     """Builds a human-readable PDF transcript of a chat session.
     session_label is a clean display string like 'Session #4' -- never the
@@ -654,6 +668,13 @@ def export_session(req: ExportRequest, request: Request, user=Depends(get_curren
 @app.get("/sessions")
 def list_sessions_route(user=Depends(get_current_user)):
     return {"sessions": list_chat_sessions(str(user.id))}
+
+@app.get("/sessions/search")
+def search_messages_route(q: str, request: Request, user=Depends(get_current_user)):
+    if not q.strip():
+        return {"results": []}
+    enforce_rate_limit("search", str(user.id), request.client.host, SEARCH_RATE_LIMIT)
+    return {"results": search_messages(str(user.id), q.strip()[:200])}
 
 @app.post("/sessions")
 def create_session_route(request: Request, user=Depends(get_current_user)):

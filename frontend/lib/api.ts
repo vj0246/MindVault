@@ -66,6 +66,16 @@ export async function getDocuments() {
   return res.data
 }
 
+export async function setDocumentFolder(documentId: string, folder: string | null) {
+  const res = await api.patch(`/documents/${documentId}/folder`, { folder })
+  return res.data
+}
+
+export async function searchMessages(query: string) {
+  const res = await api.get('/sessions/search', { params: { q: query } })
+  return res.data as { results: { session_id: string; role: string; content: string; timestamp: string }[] }
+}
+
 export async function exportSession(sessionId: string) {
   const res = await api.post('/export', { session_id: sessionId, format: 'markdown' })
   return res.data

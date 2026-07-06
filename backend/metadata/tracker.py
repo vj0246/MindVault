@@ -45,12 +45,20 @@ def get_all_documents(user_id: str) -> list:
     supabase = get_supabase()
     result = (
         supabase.table("documents")
-        .select("id, filename, chunk_count, uploaded_at")
+        .select("id, filename, chunk_count, uploaded_at, folder")
         .eq("user_id", user_id)
         .order("uploaded_at", desc=True)
         .execute()
     )
     return result.data
+
+def set_document_folder(document_id: str, user_id: str, folder: str | None) -> None:
+    supabase = get_supabase()
+    supabase.table("documents")\
+        .update({"folder": folder})\
+        .eq("id", document_id)\
+        .eq("user_id", user_id)\
+        .execute()
 
 def get_document(filename: str, user_id: str) -> dict | None:
     supabase = get_supabase()

@@ -9,6 +9,7 @@ from langchain.schema.messages import HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from graph.store import get_related_nodes
 from rag.cache import make_cache_key, get_cached, set_cached, has_any_chunks
+from rag.token_usage import record_token_usage
 from security.groq_keys import get_groq_keys
 from dotenv import load_dotenv
 
@@ -479,11 +480,19 @@ def build_retrieval_chain(mode: str = "default", user_id: str = None, document_i
             MessagesPlaceholder(variable_name="history"),
             ("human", "{question}"),
         ])
-        answer = (prompt | llm | StrOutputParser()).invoke({
+        # No StrOutputParser here -- keeping the raw AIMessage gives access to
+        # .usage_metadata (input/output/total tokens, standardized across
+        # providers by langchain-core) for the token-transparency feature.
+        # Every other chain in this module still uses StrOutputParser; this
+        # is the one call site whose token cost is actually surfaced to users.
+        message = (prompt | llm).invoke({
             "context": retrieved["context"],
             "question": input["question"],
             "history": input.get("history", [])
         })
+        answer = message.content
+        usage = getattr(message, "usage_metadata", None)
+        total_tokens = usage.get("total_tokens") if usage else None
 
         if grounded and not _verify_grounded(retrieved["context"], answer):
             answer = SAFE_REFUSAL
@@ -494,6 +503,7 @@ def build_retrieval_chain(mode: str = "default", user_id: str = None, document_i
             "chunks": retrieved.get("chunks", []),
             "confidence": retrieved.get("confidence", 0.0),
             "answer_type": "grounded" if grounded else "general_knowledge",
+            "tokens": {"message": total_tokens, **record_token_usage(user_id, total_tokens)},
         }
 
     return run_chain
@@ -728,6 +738,9 @@ def query_rag(question: str, history: list = [], mode: str = "default", user_id:
         cache_key = make_cache_key(question, user_id or "", document_ids or [], mode)
         cached = get_cached(cache_key)
         if cached:
+            # A cache hit costs zero new tokens -- report the daily total as
+            # 0/0 rather than re-querying it just to display an unchanged
+            # percentage on a response that made no Groq call.
             return {
                 "answer": cached.get("answer", ""),
                 "sources": cached.get("sources", []),
@@ -736,6 +749,7 @@ def query_rag(question: str, history: list = [], mode: str = "default", user_id:
                 "intent": cached.get("intent", "answer"),
                 "related_concepts": cached.get("related_concepts", []),
                 "answer_type": cached.get("answer_type", "grounded"),
+                "tokens": {"message": None, "daily_used": 0, "daily_pct": 0},
             }
 
     if has_reference:
@@ -781,7 +795,8 @@ Answer:""")
             "sources": ["conversation history"],
             "intent": intent,
             "related_concepts": get_related_nodes(resolved_question, user_id=user_id).get("nodes", []),
-            "answer_type": "grounded"
+            "answer_type": "grounded",
+            "tokens": {"message": None, "daily_used": 0, "daily_pct": 0},
         }
 
     elif intent == "compare":
@@ -799,6 +814,7 @@ Answer:""")
 
     related = get_related_nodes(resolved_question, user_id=user_id).get("nodes", [])
     answer_type = result.get("answer_type", "grounded")
+    tokens = result.get("tokens", {"message": None, "daily_used": 0, "daily_pct": 0})
 
     if cache_key:
         set_cached(cache_key, {
@@ -813,6 +829,7 @@ Answer:""")
         "chunks": result.get("chunks", []),
         "confidence": result.get("confidence", 0.0),
         "intent": intent,
+        "tokens": tokens,
         "related_concepts": related,
         "answer_type": answer_type
     }
@@ -838,7 +855,7 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
     if not has_any_chunks(user_id):
         yield f'data: {json.dumps({"type": "meta", "sources": [], "intent": "answer", "confidence": 0.0, "chunks": []})}\n\n'
         yield f'data: {json.dumps({"type": "token", "text": "No documents uploaded yet. Please upload a document first."})}\n\n'
-        yield f'data: {json.dumps({"type": "done", "related_concepts": [], "answer_type": "grounded"})}\n\n'
+        yield f'data: {json.dumps({"type": "done", "related_concepts": [], "answer_type": "grounded", "tokens": {"message": None, "daily_used": 0, "daily_pct": 0}})}\n\n'
         return
 
     llm = get_llm()
@@ -873,7 +890,7 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
             for i in range(0, len(words), 4):
                 chunk_text = " ".join(words[i:i + 4]) + (" " if i + 4 < len(words) else "")
                 yield f'data: {json.dumps({"type": "token", "text": chunk_text})}\n\n'
-            yield f'data: {json.dumps({"type": "done", "related_concepts": cached.get("related_concepts", []), "full_answer": cached_answer, "answer_type": cached.get("answer_type", "grounded")})}\n\n'
+            yield f'data: {json.dumps({"type": "done", "related_concepts": cached.get("related_concepts", []), "full_answer": cached_answer, "answer_type": cached.get("answer_type", "grounded"), "tokens": {"message": None, "daily_used": 0, "daily_pct": 0}})}\n\n'
             return
 
     if has_reference:
@@ -947,7 +964,7 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
                 "answer_type": "grounded"
             })
 
-        yield f'data: {json.dumps({"type": "done", "related_concepts": related, "full_answer": answer, "answer_type": "grounded"})}\n\n'
+        yield f'data: {json.dumps({"type": "done", "related_concepts": related, "full_answer": answer, "answer_type": "grounded", "tokens": {"message": None, "daily_used": 0, "daily_pct": 0}})}\n\n'
         return
 
     # Answer intent — retrieve context then STREAM the LLM tokens
@@ -963,20 +980,30 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
     prompt = ChatPromptTemplate.from_template(system_msg)
 
     full_answer = ""
+    last_usage = None
     with ThreadPoolExecutor(max_workers=1) as _graph_executor:
         # No copy_context() -- get_related_nodes is pure Supabase reads, no LLM.
         # copy_context().run() inside an active @traceable span causes
         # "cannot enter context: already entered" on Python 3.14.
         _graph_future = _graph_executor.submit(get_related_nodes, resolved_question, user_id=user_id)
 
-        for token in (prompt | llm | StrOutputParser()).stream({
+        # No StrOutputParser here (same reasoning as build_retrieval_chain) --
+        # raw AIMessageChunks expose .usage_metadata, typically populated on
+        # the final chunk, needed for the token-transparency feature.
+        for chunk in (prompt | llm).stream({
             "context": retrieved["context"],
             "question": resolved_question
         }):
-            full_answer += token
-            yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
+            piece = chunk.content
+            full_answer += piece
+            if getattr(chunk, "usage_metadata", None):
+                last_usage = chunk.usage_metadata
+            yield f'data: {json.dumps({"type": "token", "text": piece})}\n\n'
 
         related = _graph_future.result().get("nodes", [])
+
+    total_tokens = last_usage.get("total_tokens") if last_usage else None
+    token_info = {"message": total_tokens, **record_token_usage(user_id, total_tokens)}
 
     # Self-RAG-style verification, document-grounded path only. Tokens are
     # already streamed by this point -- they can't be un-sent, so instead of
@@ -996,4 +1023,4 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
             "intent": intent, "related_concepts": related, "answer_type": answer_type
         })
 
-    yield f'data: {json.dumps({"type": "done", "related_concepts": related, "full_answer": full_answer, "answer_type": answer_type, "verified": verified})}\n\n'
+    yield f'data: {json.dumps({"type": "done", "related_concepts": related, "full_answer": full_answer, "answer_type": answer_type, "verified": verified, "tokens": token_info})}\n\n'

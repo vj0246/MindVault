@@ -12,6 +12,8 @@ import {
   shareSession,
   unshareSession,
   getDocuments,
+  setDocumentFolder,
+  searchMessages,
   exportSession,
   exportSessionPDF,
   getGraphTopic,
@@ -45,6 +47,7 @@ interface Message {
   timestamp: string
   answer_type?: 'grounded' | 'general_knowledge'
   unverified?: boolean
+  tokens?: { message: number | null; daily_used: number; daily_pct: number }
 }
 
 interface Doc {
@@ -52,6 +55,7 @@ interface Doc {
   filename: string
   chunk_count: number
   uploaded_at: string
+  folder?: string | null
 }
 
 type PreferencesState = Preferences
@@ -146,12 +150,26 @@ function ConfidenceBadge({ score }: { score: number }) {
   )
 }
 
-function SourcePanel({ chunks }: { chunks: ChunkSource[] }) {
+function SourcePanel({ chunks, jumpTarget }: { chunks: ChunkSource[]; jumpTarget?: { filename: string; nonce: number } | null }) {
   const [open, setOpen] = useState(false)
   const [copied, setCopied] = useState<number | null>(null)
+  const [highlighted, setHighlighted] = useState<number | null>(null)
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([])
   const copyChunk = (text: string, i: number) => {
     navigator.clipboard.writeText(text).then(() => { setCopied(i); setTimeout(() => setCopied(null), 1500) })
   }
+
+  useEffect(() => {
+    if (!jumpTarget) return
+    const idx = chunks.findIndex(c => c.filename === jumpTarget.filename)
+    if (idx < 0) return
+    setOpen(true)
+    setHighlighted(idx)
+    setTimeout(() => rowRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60)
+    const t = setTimeout(() => setHighlighted(null), 2000)
+    return () => clearTimeout(t)
+  }, [jumpTarget, chunks])
+
   return (
     <div style={{ display: 'inline-block' }}>
       <button onClick={() => setOpen(!open)} className="chip tap-target" title="View source chunks"
@@ -161,7 +179,12 @@ function SourcePanel({ chunks }: { chunks: ChunkSource[] }) {
       {open && (
         <div style={{ marginTop: 8, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
           {chunks.map((c, i) => (
-            <div key={i} style={{ padding: '10px 12px', borderBottom: i < chunks.length - 1 ? '1px solid var(--border)' : 'none' }}>
+            <div key={i} ref={el => { rowRefs.current[i] = el }} style={{
+              padding: '10px 12px',
+              borderBottom: i < chunks.length - 1 ? '1px solid var(--border)' : 'none',
+              background: highlighted === i ? 'var(--glow)' : undefined,
+              transition: 'background-color 0.3s var(--ease)'
+            }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span className="chip" style={{ color: 'var(--accent)', fontWeight: 600, padding: 0 }}>📄 {c.filename}</span>
@@ -197,6 +220,8 @@ function MessageBubble({ msg, onConceptClick }: {
   msg: Message
   onConceptClick: (c: string) => void
 }) {
+  const [jumpTarget, setJumpTarget] = useState<{ filename: string; nonce: number } | null>(null)
+
   if (msg.role === 'user') {
     return (
       <div className="flex justify-end fade-up" style={{ width: '100%' }}>
@@ -231,8 +256,18 @@ function MessageBubble({ msg, onConceptClick }: {
       )}
       {msg.sources && msg.sources.length > 0 && msg.sources[0] !== 'conversation history' && (
         <div className="mt-3 flex flex-wrap gap-1 items-center">
-          {msg.sources.map((s, i) => <span key={i} className="source-chip">📄 {s}</span>)}
-          {msg.chunks && msg.chunks.length > 0 && <SourcePanel chunks={msg.chunks} />}
+          {msg.sources.map((s, i) => {
+            const hasChunk = msg.chunks?.some(c => c.filename === s)
+            return (
+              <span key={i} className="source-chip"
+                onClick={hasChunk ? () => setJumpTarget({ filename: s, nonce: Date.now() }) : undefined}
+                title={hasChunk ? 'Click to view the exact retrieved snippet' : undefined}
+                style={hasChunk ? { cursor: 'pointer' } : undefined}>
+                📄 {s}
+              </span>
+            )
+          })}
+          {msg.chunks && msg.chunks.length > 0 && <SourcePanel chunks={msg.chunks} jumpTarget={jumpTarget} />}
         </div>
       )}
       {msg.related_concepts && msg.related_concepts.length > 0 && (
@@ -245,12 +280,15 @@ function MessageBubble({ msg, onConceptClick }: {
           </div>
         </div>
       )}
-      <p className="eyebrow" style={{ marginTop: 6, textTransform: 'none', letterSpacing: 0 }}>{timeStr(msg.timestamp)}</p>
+      <p className="eyebrow" style={{ marginTop: 6, textTransform: 'none', letterSpacing: 0 }}>
+        {timeStr(msg.timestamp)}
+        {msg.tokens?.message != null && <span> · {msg.tokens.message} tokens</span>}
+      </p>
     </div>
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, width, onWidthChange, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences, onOpenMemory }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, width, onWidthChange, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences, onOpenMemory, dailyTokenPct, onFolderChange }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onExportPDF: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
@@ -258,11 +296,41 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
   selectedDocs: string[]; onToggleDoc: (id: string) => void
   sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
   onShare: (id: string) => void; sharingId: string | null; onEditPreferences: () => void; onOpenMemory: () => void
+  dailyTokenPct: number | null; onFolderChange: (id: string, folder: string | null) => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [resizing, setResizing] = useState(false)
   const resizingRef = useRef(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<{ session_id: string; role: string; content: string; timestamp: string }[] | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [folderEditId, setFolderEditId] = useState<string | null>(null)
+  const [folderDraft, setFolderDraft] = useState('')
+
+  const runSearch = async (q: string) => {
+    if (!q.trim()) { setSearchResults(null); return }
+    setSearching(true)
+    try {
+      const data = await searchMessages(q.trim())
+      setSearchResults(data.results || [])
+    } catch {
+      setSearchResults([])
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  const sessionName = (id: string) => sessions.find(s => s.id === id)?.name || 'Chat'
+
+  const foldersMap = new Map<string, Doc[]>()
+  for (const d of docs) {
+    const key = d.folder || 'Uncategorized'
+    if (!foldersMap.has(key)) foldersMap.set(key, [])
+    foldersMap.get(key)!.push(d)
+  }
+  const folderNames = Array.from(foldersMap.keys()).sort((a, b) =>
+    a === 'Uncategorized' ? 1 : b === 'Uncategorized' ? -1 : a.localeCompare(b))
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -308,6 +376,21 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
           </div>
           <button className="icon-btn" onClick={onClose} style={{ color: 'var(--text3)', fontSize: 18 }}>✕</button>
         </div>
+        {dailyTokenPct != null && (
+          <div className="px-5" style={{ marginTop: -6, marginBottom: 8 }} title="Share of today's fairness token budget used">
+            <div className="flex items-center justify-between" style={{ marginBottom: 3 }}>
+              <span className="eyebrow" style={{ textTransform: 'none', letterSpacing: 0 }}>Daily usage</span>
+              <span className="eyebrow" style={{ textTransform: 'none', letterSpacing: 0 }}>{dailyTokenPct}%</span>
+            </div>
+            <div style={{ height: 3, borderRadius: 999, background: 'var(--surface2)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', width: `${Math.min(100, dailyTokenPct)}%`,
+                background: dailyTokenPct >= 90 ? 'var(--danger)' : dailyTokenPct >= 60 ? 'var(--accent2)' : 'var(--accent)',
+                transition: 'width 0.3s var(--ease)'
+              }} />
+            </div>
+          </div>
+        )}
         <div className="divider" />
         <div className="flex flex-col gap-4 p-4 flex-1 min-h-0">
           <div className="flex-shrink-0">
@@ -334,6 +417,40 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             </div>
             <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.docx,.doc,.jpg,.jpeg,.png,.gif,.webp" multiple className="hidden"
               onChange={(e) => { const files = Array.from(e.target.files || []); if (files.length) onUpload(files) }} />
+          </div>
+
+          <div className="flex-shrink-0" style={{ position: 'relative' }}>
+            <input
+              type="text"
+              value={searchQuery}
+              placeholder="Search past conversations…"
+              className="vault-input"
+              style={{ minHeight: 32, fontSize: 12, border: '1px solid var(--border2)', background: 'var(--bg)' }}
+              onChange={e => { setSearchQuery(e.target.value); runSearch(e.target.value) }}
+              onKeyDown={e => { if (e.key === 'Escape') { setSearchQuery(''); setSearchResults(null) } }}
+            />
+            {searchQuery && (searching || (searchResults && searchResults.length > 0)) && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 4,
+                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)',
+                boxShadow: 'var(--shadow-md)', maxHeight: 240, overflowY: 'auto'
+              }}>
+                {searching && <p style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 10px' }}>Searching…</p>}
+                {!searching && searchResults?.map((r, i) => (
+                  <div key={i} className="tap-target"
+                    onClick={() => { onSelectSession(r.session_id); setSearchQuery(''); setSearchResults(null) }}
+                    style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: i < searchResults.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <p style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>{sessionName(r.session_id)}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.content.slice(0, 80)}
+                    </p>
+                  </div>
+                ))}
+                {!searching && searchResults && searchResults.length === 0 && (
+                  <p style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 10px' }}>No matches</p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col flex-shrink-0" style={{ maxHeight: '30%' }}>
@@ -378,18 +495,49 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
             {docs.length === 0 ? (
               <p style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: '16px 0' }}>No documents yet</p>
             ) : (
-              <div className="flex flex-col gap-1 overflow-y-auto">
-                {docs.map((doc, i) => (
-                  <div key={i} className={`doc-item tilt-card fade-up ${selectedDocs.includes(doc.id) ? 'active' : ''}`}
-                    style={{ animationDelay: `${i * 0.04}s` }}
-                    onClick={() => onToggleDoc(doc.id)}>
-                    <input type="checkbox" checked={selectedDocs.includes(doc.id)} onChange={() => onToggleDoc(doc.id)}
-                      onClick={e => e.stopPropagation()} style={{ flexShrink: 0, accentColor: 'var(--accent)', cursor: 'pointer' }} />
-                    <div className="flex-1 min-w-0">
-                      <p style={{ fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</p>
-                      <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
-                        {doc.chunk_count} chunks · {new Date(doc.uploaded_at).toLocaleDateString()}
-                      </p>
+              <div className="flex flex-col gap-2 overflow-y-auto">
+                {folderNames.map(folderName => (
+                  <div key={folderName}>
+                    <p className="eyebrow" style={{ marginBottom: 4, color: 'var(--text3)' }}>
+                      {folderName} ({foldersMap.get(folderName)!.length})
+                    </p>
+                    <div className="flex flex-col gap-1">
+                      {foldersMap.get(folderName)!.map((doc, i) => (
+                        <div key={doc.id} className={`doc-item tilt-card fade-up ${selectedDocs.includes(doc.id) ? 'active' : ''}`}
+                          style={{ animationDelay: `${i * 0.04}s` }}
+                          onClick={() => onToggleDoc(doc.id)}>
+                          <input type="checkbox" checked={selectedDocs.includes(doc.id)} onChange={() => onToggleDoc(doc.id)}
+                            onClick={e => e.stopPropagation()} style={{ flexShrink: 0, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                          <div className="flex-1 min-w-0">
+                            <p style={{ fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</p>
+                            <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                              {doc.chunk_count} chunks · {new Date(doc.uploaded_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {folderEditId === doc.id ? (
+                            <input
+                              autoFocus
+                              value={folderDraft}
+                              onClick={e => e.stopPropagation()}
+                              onChange={e => setFolderDraft(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') { onFolderChange(doc.id, folderDraft.trim() || null); setFolderEditId(null) }
+                                if (e.key === 'Escape') setFolderEditId(null)
+                              }}
+                              onBlur={() => { onFolderChange(doc.id, folderDraft.trim() || null); setFolderEditId(null) }}
+                              placeholder="Folder…"
+                              style={{ width: 70, fontSize: 10, background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 4, padding: '2px 4px', flexShrink: 0 }}
+                            />
+                          ) : (
+                            <button
+                              className="tap-target"
+                              title="Set folder"
+                              onClick={e => { e.stopPropagation(); setFolderEditId(doc.id); setFolderDraft(doc.folder || '') }}
+                              style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '0 2px' }}
+                            >🏷</button>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -633,6 +781,7 @@ export default function Home() {
   const [sidebarWidth, setSidebarWidth] = useState(280)
   const [selectedDocs, setSelectedDocs] = useState<string[]>([])
   const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [dailyTokenPct, setDailyTokenPct] = useState<number | null>(null)
   const [userId, setUserId] = useState<string>('')
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [sharingId, setSharingId] = useState<string | null>(null)
@@ -753,6 +902,16 @@ export default function Home() {
     } catch { /* silent */ }
   }
 
+  const handleFolderChange = async (documentId: string, folder: string | null) => {
+    setDocs(prev => prev.map(d => d.id === documentId ? { ...d, folder } : d))
+    try {
+      await setDocumentFolder(documentId, folder)
+    } catch {
+      showToast('Could not update folder', 'error')
+      loadDocs(false)
+    }
+  }
+
   const handleViewGraph = async (topic: string) => {
     setGraphOpen(true)
     setGraphTopic(topic)
@@ -861,7 +1020,9 @@ export default function Home() {
         ...m,
         related_concepts: done.related_concepts || [],
         answer_type: done.answer_type ?? m.answer_type,
+        tokens: done.tokens,
       } : m))
+      if (done.tokens?.daily_used) setDailyTokenPct(done.tokens.daily_pct)
       setLoading(false)
     }
     const onError = (err: string) => {
@@ -982,6 +1143,8 @@ export default function Home() {
         onShare={handleShare} sharingId={sharingId}
         onEditPreferences={() => { setOnboardingRequired(false); setShowOnboarding(true) }}
         onOpenMemory={openMemory}
+        dailyTokenPct={dailyTokenPct}
+        onFolderChange={handleFolderChange}
       />
 
       {showOnboarding && (

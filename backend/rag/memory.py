@@ -41,6 +41,24 @@ def clear_session_messages(session_id: str, user_id: str):
         .eq("user_id", user_id)\
         .execute()
 
+def search_messages(user_id: str, query: str, limit: int = 20) -> list:
+    """Full-text-ish search across a user's own message history (not just
+    the current session) so 'that thing I discussed last week' is findable.
+    Escapes ILIKE wildcards in the user's input so a literal '%' or '_' in
+    their search text doesn't behave as a wildcard."""
+    supabase = get_supabase()
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    result = (
+        supabase.table("sessions")
+        .select("session_id, role, content, timestamp")
+        .eq("user_id", user_id)
+        .ilike("content", f"%{escaped}%")
+        .order("timestamp", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
 # ─────────────────────────────────────────────────────────────
 # Chat session metadata (new — multi-session support)
 # ─────────────────────────────────────────────────────────────
