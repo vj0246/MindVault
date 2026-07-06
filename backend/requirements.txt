@@ -15,4 +15,4 @@ fastembed>=0.5,<1
 docx2txt>=0.8,<1
 flashrank>=0.2,<1
 fpdf2>=2.8,<3
-langsmith==0.1.147
+langsmith==0.3.45
