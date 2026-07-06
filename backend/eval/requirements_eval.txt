@@ -1,16 +1,11 @@
-fastapi
-uvicorn
-python-multipart
-langchain==0.3.25
-langchain-community==0.3.24
-langchain-text-splitters==0.3.8
-langchain-groq==0.3.2
-langchain-core==0.3.65
-pypdf
-python-dotenv
-pydantic
-supabase
-groq
-fastembed
-docx2txt
-flashrank
+# Install alongside backend/requirements.txt:
+#   pip install -r requirements.txt -r eval/requirements_eval.txt
+# Resolved together with the main pins via a real dry-run + install
+# (not guessed) -- ragas 0.4.3 is what pip actually picks as compatible
+# with langchain-core==0.3.65 / langsmith==0.3.45; ragas==0.1.21 (the old
+# pin here) needs langchain-core 0.2.x and will not resolve against the
+# main app's current stack.
+ragas>=0.4,<0.5
+datasets>=5.0,<6
+pandas>=2.3,<3
+tabulate>=0.9,<1
