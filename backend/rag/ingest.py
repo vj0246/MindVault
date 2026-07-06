@@ -248,7 +248,7 @@ def chunk_documents(pages, filename="") -> list:
         Document(page_content=chunk, metadata={"source": filename, "chunk_index": i})
         for i, chunk in enumerate(raw_chunks)
     ]
-    print(f"[Ingest] Smart chunker → {len(docs)} chunks")
+    print(f"[Ingest] Smart chunker -> {len(docs)} chunks")
     return docs
 
 

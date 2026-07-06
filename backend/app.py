@@ -100,7 +100,7 @@ def root():
     return {"status": "MindVault is running"}
 
 def _build_graph_for_chunks(chunks, filename: str, user_id: str):
-    """Runs in the background after /upload responds. Extracts entities and
+    """Runs in the background after ingestion finishes. Extracts entities and
     relationships from up to 10 chunks and adds them to the knowledge graph."""
     for chunk in chunks:
         try:
@@ -109,11 +109,52 @@ def _build_graph_for_chunks(chunks, filename: str, user_id: str):
         except Exception as e:
             print(f"[Graph] Background extraction failed for a chunk: {e}")
 
+def _ingest_and_finalize(file_path: str, document_id: str, filename: str, user_id: str):
+    """Runs entirely in the background, after /upload has already responded.
+    Parsing + chunking + embedding is CPU-bound and was previously done
+    inline inside the request -- on Render's free tier that could exceed
+    the platform's own request timeout on a slow/heavy document. When that
+    happened the connection was killed before Python's exception handling
+    ever ran, leaving the chunk_count=-1 row from log_document() as a
+    silent zombie with no chunks and no error surfaced anywhere. Moving
+    the work here means the HTTP response is never at risk of that timeout,
+    and every outcome (success or any exception) is handled explicitly:
+    the row either gets a real chunk_count or gets deleted -- never left
+    stuck mid-way."""
+    sb = get_supabase()
+    try:
+        chunks = ingest_document(
+            file_path, document_id=document_id, user_id=user_id,
+            langsmith_extra={"metadata": {"user_id": user_id, "filename": filename, "document_id": document_id}}
+        )
+        sb.table("documents").update({"chunk_count": len(chunks)}).eq("id", document_id).execute()
+
+        # A successful upload just changed the answer to "does this user have
+        # any documents" -- clear the short-TTL cache immediately so the
+        # very next query never sees a stale "no documents" result.
+        invalidate_has_chunks(user_id)
+
+        _build_graph_for_chunks(chunks[:10], filename, user_id)
+    except Exception as e:
+        # Logging must never be able to block the cleanup delete below --
+        # e.g. a non-ASCII character in a caught error message raising
+        # UnicodeEncodeError on a non-UTF-8 stdout would otherwise skip
+        # straight past the delete and leave the exact zombie row this
+        # function exists to prevent.
+        try:
+            import traceback
+            print(f"[Ingest] Background ingestion failed for '{filename}' (document_id={document_id}): {traceback.format_exc()}")
+        except Exception:
+            print(f"[Ingest] Background ingestion failed for document_id={document_id} (error message could not be printed)")
+        try:
+            sb.table("documents").delete().eq("id", document_id).execute()
+        except Exception as cleanup_err:
+            print(f"[Ingest] Cleanup delete also failed for document_id={document_id}: {cleanup_err}")
+
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...), background_tasks: BackgroundTasks = None, user=Depends(get_current_user)):
     try:
         enforce_rate_limit("upload", str(user.id), request.client.host, UPLOAD_RATE_LIMIT)
-        sb = get_supabase()
         ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx", ".doc", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff"}
         ext = os.path.splitext(file.filename)[1].lower()
         if ext not in ALLOWED_EXTENSIONS:
@@ -144,46 +185,29 @@ async def upload_file(request: Request, file: UploadFile = File(...), background
             buffer.write(contents)
 
         document_id = str(uuid.uuid4())
+        # chunk_count=-1 is the "still processing" sentinel -- _ingest_and_finalize
+        # (below) replaces it with the real count on success, or deletes the
+        # row entirely on failure. It is never left at this value.
         actual_document_id = log_document(
             filename=file.filename,
             path=file_path,
-            chunk_count=0,
+            chunk_count=-1,
             document_id=document_id,
             user_id=str(user.id)
         )
 
-        try:
-            chunks = ingest_document(
-                file_path, document_id=actual_document_id, user_id=str(user.id),
-                langsmith_extra={"metadata": {"user_id": str(user.id), "filename": file.filename, "document_id": actual_document_id}}
-            )
-        except ValueError as e:
-            # Clean, user-facing error (empty/unreadable document) -- remove
-            # the orphaned chunk_count=0 row created by log_document above
-            # so it doesn't clutter the user's sidebar with a useless doc.
-            sb.table("documents").delete().eq("id", actual_document_id).execute()
-            raise HTTPException(status_code=400, detail=str(e))
-
-        sb.table("documents").update(
-            {"chunk_count": len(chunks)}
-        ).eq("id", actual_document_id).execute()
-
-        # A successful upload just changed the answer to "does this user have
-        # any documents" -- clear the short-TTL cache immediately so the
-        # very next query never sees a stale "no documents" result.
-        invalidate_has_chunks(str(user.id))
-
-        # Graph extraction runs AFTER the response is sent -- up to 10
-        # sequential Groq calls here were adding 10-30s to upload latency
-        # and risking Render's proxy timeout (502s on larger documents).
         if background_tasks is not None:
             background_tasks.add_task(
-                _build_graph_for_chunks, chunks[:10], file.filename, str(user.id)
+                _ingest_and_finalize, file_path, actual_document_id, file.filename, str(user.id)
             )
+        else:
+            # BackgroundTasks is always provided by FastAPI in practice --
+            # this is just a safe fallback, not the expected path.
+            _ingest_and_finalize(file_path, actual_document_id, file.filename, str(user.id))
 
         return {
-            "message": f"{file.filename} ingested successfully.",
-            "chunks": len(chunks),
+            "status": "processing",
+            "document_id": actual_document_id,
             "filename": file.filename
         }
     except HTTPException:

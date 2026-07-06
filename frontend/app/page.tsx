@@ -511,7 +511,9 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
                           <div className="flex-1 min-w-0">
                             <p style={{ fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</p>
                             <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
-                              {doc.chunk_count} chunks · {new Date(doc.uploaded_at).toLocaleDateString()}
+                              {doc.chunk_count === -1
+                                ? <span style={{ color: 'var(--accent)' }}>⟳ Processing…</span>
+                                : `${doc.chunk_count} chunks`} · {new Date(doc.uploaded_at).toLocaleDateString()}
                             </p>
                           </div>
                           {folderEditId === doc.id ? (
@@ -945,25 +947,57 @@ export default function Home() {
     }
   }
 
+  // Ingestion (parse/chunk/embed) now runs in a background task on the
+  // server -- /upload returns almost immediately with {status: "processing",
+  // document_id}. This polls until each uploaded doc's chunk_count moves off
+  // the -1 "processing" sentinel, or disappears entirely (background task
+  // hit an error and cleaned the row up -- surfaced here as a failure toast
+  // instead of a silent vanish).
+  const pollUploads = (pending: { id: string; filename: string }[]) => {
+    let remaining = pending
+    let attempts = 0
+    const maxAttempts = 40 // ~2 minutes at 3s interval
+    const interval = setInterval(async () => {
+      attempts++
+      try {
+        const data = await getDocuments()
+        const freshDocs: Doc[] = data.documents || []
+        setDocs(freshDocs)
+        localStorage.setItem('mindvault_docs', JSON.stringify(freshDocs))
+        remaining = remaining.filter(p => {
+          const found = freshDocs.find(d => d.id === p.id)
+          if (!found) {
+            showToast(`${p.filename} failed to process`, 'error')
+            return false
+          }
+          return found.chunk_count === -1
+        })
+      } catch { /* transient fetch failure -- try again next tick */ }
+
+      if (remaining.length === 0 || attempts >= maxAttempts) clearInterval(interval)
+    }, 3000)
+  }
+
   const handleUpload = async (files: File[]) => {
     if (!files.length) return
     setUploading(true)
-    let successCount = 0
+    const pending: { id: string; filename: string }[] = []
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
       try {
-        setUploadStatus(files.length > 1 ? `Uploading ${i + 1}/${files.length}: ${file.name.slice(0, 20)}...` : 'Embedding chunks...')
-        await uploadDocument(file)
-        successCount++
+        setUploadStatus(files.length > 1 ? `Uploading ${i + 1}/${files.length}: ${file.name.slice(0, 20)}...` : 'Uploading...')
+        const res = await uploadDocument(file)
+        pending.push({ id: res.document_id, filename: file.name })
       } catch {
         showToast(`Failed: ${file.name}`, 'error')
       }
     }
     localStorage.removeItem('mindvault_docs')
     await loadDocs(false)
-    if (successCount > 0) {
-      setUploadStatus(`Done — ${successCount} file${successCount > 1 ? 's' : ''} added`)
-      showToast(`${successCount} file${successCount > 1 ? 's' : ''} added to vault`, 'success')
+    if (pending.length > 0) {
+      setUploadStatus(`Processing ${pending.length} file${pending.length > 1 ? 's' : ''} in background…`)
+      showToast(`${pending.length} file${pending.length > 1 ? 's' : ''} uploaded — processing`, 'info')
+      pollUploads(pending)
     }
     setTimeout(() => { setUploading(false); setUploadStatus('') }, 2500)
   }

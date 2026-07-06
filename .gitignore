@@ -18,6 +18,7 @@ frontend/tsconfig.tsbuildinfo
 # committed virtualenvs -- should never have been tracked (compiled
 # binaries with no provenance, ~12k files of repo bloat)
 backend/eval_env/
+backend/eval_venv/
 mindvault/
 *.venv/
 venv/
