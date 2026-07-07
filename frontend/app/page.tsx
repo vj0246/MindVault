@@ -13,6 +13,7 @@ import {
   unshareSession,
   getDocuments,
   setDocumentFolder,
+  deleteDocument,
   searchMessages,
   exportSession,
   exportSessionPDF,
@@ -288,7 +289,7 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, width, onWidthChange, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences, onOpenMemory, dailyTokenPct, onFolderChange }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, width, onWidthChange, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences, onOpenMemory, dailyTokenPct, onFolderChange, onDeleteDoc }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onExportPDF: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
@@ -297,6 +298,7 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
   sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
   onShare: (id: string) => void; sharingId: string | null; onEditPreferences: () => void; onOpenMemory: () => void
   dailyTokenPct: number | null; onFolderChange: (id: string, folder: string | null) => void
+  onDeleteDoc: (id: string, filename: string) => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -538,6 +540,12 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
                               style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '0 2px' }}
                             >🏷</button>
                           )}
+                          <button
+                            className="tap-target"
+                            title="Delete document"
+                            onClick={e => { e.stopPropagation(); onDeleteDoc(doc.id, doc.filename) }}
+                            style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '0 2px' }}
+                          >🗑</button>
                         </div>
                       ))}
                     </div>
@@ -914,6 +922,20 @@ export default function Home() {
     }
   }
 
+  const handleDeleteDoc = async (documentId: string, filename: string) => {
+    if (!window.confirm(`Delete "${filename}"? This removes it and its chunks permanently.`)) return
+    const prevDocs = docs
+    setDocs(prev => prev.filter(d => d.id !== documentId))
+    setSelectedDocs(prev => prev.filter(id => id !== documentId))
+    try {
+      await deleteDocument(documentId)
+      localStorage.setItem('mindvault_docs', JSON.stringify(prevDocs.filter(d => d.id !== documentId)))
+    } catch {
+      setDocs(prevDocs)
+      showToast('Could not delete document', 'error')
+    }
+  }
+
   const handleViewGraph = async (topic: string) => {
     setGraphOpen(true)
     setGraphTopic(topic)
@@ -1179,6 +1201,7 @@ export default function Home() {
         onOpenMemory={openMemory}
         dailyTokenPct={dailyTokenPct}
         onFolderChange={handleFolderChange}
+        onDeleteDoc={handleDeleteDoc}
       />
 
       {showOnboarding && (

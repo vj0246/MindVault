@@ -71,6 +71,11 @@ export async function setDocumentFolder(documentId: string, folder: string | nul
   return res.data
 }
 
+export async function deleteDocument(documentId: string) {
+  const res = await api.delete(`/documents/${documentId}`)
+  return res.data
+}
+
 export async function searchMessages(query: string) {
   const res = await api.get('/sessions/search', { params: { q: query } })
   return res.data as { results: { session_id: string; role: string; content: string; timestamp: string }[] }

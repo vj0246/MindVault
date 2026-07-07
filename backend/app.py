@@ -18,7 +18,7 @@ from rag.memory import (
     list_memory_notes, add_memory_note, delete_memory_note,
     search_messages
 )
-from metadata.tracker import log_document, get_all_documents, set_document_folder
+from metadata.tracker import log_document, get_all_documents, set_document_folder, delete_document
 from graph.extractor import extract_entities_and_relations
 from graph.store import add_to_graph, get_related_nodes, get_full_graph
 from security.rate_limit import enforce_rate_limit
@@ -564,6 +564,14 @@ def set_document_folder_route(document_id: str, body: FolderRequest, user=Depend
     folder = body.folder.strip() if body.folder and body.folder.strip() else None
     set_document_folder(document_id, str(user.id), folder)
     return {"ok": True, "folder": folder}
+
+@app.delete("/documents/{document_id}")
+def delete_document_route(document_id: str, user=Depends(get_current_user)):
+    found = delete_document(document_id, str(user.id))
+    if not found:
+        raise HTTPException(status_code=404, detail="Document not found")
+    invalidate_has_chunks(str(user.id))
+    return {"ok": True}
 
 def _build_session_pdf(history: list, session_label: str) -> bytes:
     """Builds a human-readable PDF transcript of a chat session.

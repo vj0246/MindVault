@@ -60,6 +60,25 @@ def set_document_folder(document_id: str, user_id: str, folder: str | None) -> N
         .eq("user_id", user_id)\
         .execute()
 
+def delete_document(document_id: str, user_id: str) -> bool:
+    """Deletes a document and its chunks, scoped to user_id so a user can
+    never delete another user's document by guessing an id. Chunks are
+    deleted first since they reference document_id with no cascading FK
+    guaranteed. Returns False if no matching document was found."""
+    supabase = get_supabase()
+    owned = (
+        supabase.table("documents")
+        .select("id")
+        .eq("id", document_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not owned.data:
+        return False
+    supabase.table("chunks").delete().eq("document_id", document_id).execute()
+    supabase.table("documents").delete().eq("id", document_id).eq("user_id", user_id).execute()
+    return True
+
 def get_document(filename: str, user_id: str) -> dict | None:
     supabase = get_supabase()
     result = (
