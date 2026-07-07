@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 import os
 import re
 import uuid
+import concurrent.futures
 from rag.db import get_supabase
 from rag.ingest import ingest_document, load_document, load_image_via_groq, IMAGE_EXTENSIONS
 from rag.retrieve1 import query_rag, query_with_attachment, stream_rag, stream_with_attachment
@@ -35,6 +36,17 @@ MEMORY_RATE_LIMIT = 60
 SHARE_RATE_LIMIT = 30
 SEARCH_RATE_LIMIT = 30
 FOLDER_MAX_CHARS = 60
+
+# Wall-clock cap on the parse/chunk/embed pipeline. Found via Supabase API
+# logs that a real upload can hang inside ingest_document() indefinitely --
+# POST /documents fires, then nothing (no chunks insert, no chunk_count
+# update, no cleanup delete) ever again, for hours. Python can't forcibly
+# kill a stuck thread, so this bounds how long we *wait* on it: past the
+# cap we stop waiting, delete the row, and let the user see a real failure
+# instead of "Processing…" forever. The orphaned thread finishes or dies on
+# its own; it no longer blocks anything user-visible.
+INGEST_TIMEOUT_SECONDS = 300
+_ingest_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="ingest")
 
 # Client-controlled input caps -- everything here ends up either in an LLM
 # prompt (cost/latency abuse) or a DB row (storage abuse) if left unbounded.
@@ -123,10 +135,18 @@ def _ingest_and_finalize(file_path: str, document_id: str, filename: str, user_i
     stuck mid-way."""
     sb = get_supabase()
     try:
-        chunks = ingest_document(
-            file_path, document_id=document_id, user_id=user_id,
+        future = _ingest_executor.submit(
+            ingest_document, file_path, document_id=document_id, user_id=user_id,
             langsmith_extra={"metadata": {"user_id": user_id, "filename": filename, "document_id": document_id}}
         )
+        try:
+            chunks = future.result(timeout=INGEST_TIMEOUT_SECONDS)
+        except concurrent.futures.TimeoutError:
+            raise TimeoutError(
+                f"Ingestion exceeded {INGEST_TIMEOUT_SECONDS}s -- treating as failed. "
+                f"The underlying thread may still be running but is abandoned; "
+                f"it no longer holds up this document's status."
+            )
         sb.table("documents").update({"chunk_count": len(chunks)}).eq("id", document_id).execute()
 
         # A successful upload just changed the answer to "does this user have
