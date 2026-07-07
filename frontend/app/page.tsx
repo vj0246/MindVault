@@ -289,7 +289,7 @@ function MessageBubble({ msg, onConceptClick }: {
   )
 }
 
-function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, width, onWidthChange, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences, onOpenMemory, dailyTokenPct, onFolderChange, onDeleteDoc }: {
+function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount, onExport, onExportPDF, onNewSession, onClearSession, open, onClose, width, onWidthChange, selectedDocs, onToggleDoc, sessions, onSelectSession, onDeleteSession, onShare, sharingId, onEditPreferences, onOpenMemory, dailyTokenPct, onOpenDocManager }: {
   docs: Doc[]; onUpload: (files: File[]) => void; uploading: boolean; uploadStatus: string
   sessionId: string; msgCount: number; onExport: () => void; onExportPDF: () => void; onNewSession: () => void
   onClearSession: () => void; open: boolean; onClose: () => void
@@ -297,8 +297,7 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
   selectedDocs: string[]; onToggleDoc: (id: string) => void
   sessions: ChatSession[]; onSelectSession: (id: string) => void; onDeleteSession: (id: string) => void
   onShare: (id: string) => void; sharingId: string | null; onEditPreferences: () => void; onOpenMemory: () => void
-  dailyTokenPct: number | null; onFolderChange: (id: string, folder: string | null) => void
-  onDeleteDoc: (id: string, filename: string) => void
+  dailyTokenPct: number | null; onOpenDocManager: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -307,8 +306,7 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<{ session_id: string; role: string; content: string; timestamp: string }[] | null>(null)
   const [searching, setSearching] = useState(false)
-  const [folderEditId, setFolderEditId] = useState<string | null>(null)
-  const [folderDraft, setFolderDraft] = useState('')
+  const [docFilter, setDocFilter] = useState('')
 
   const runSearch = async (q: string) => {
     if (!q.trim()) { setSearchResults(null); return }
@@ -325,13 +323,15 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
 
   const sessionName = (id: string) => sessions.find(s => s.id === id)?.name || 'Chat'
 
+  const matchesFilter = (d: Doc) => d.filename.toLowerCase().includes(docFilter.trim().toLowerCase())
   const foldersMap = new Map<string, Doc[]>()
   for (const d of docs) {
+    if (!matchesFilter(d)) continue
     const key = d.folder || 'Uncategorized'
     if (!foldersMap.has(key)) foldersMap.set(key, [])
     foldersMap.get(key)!.push(d)
   }
-  const folderNames = Array.from(foldersMap.keys()).sort((a, b) =>
+  const filteredFolderNames = Array.from(foldersMap.keys()).sort((a, b) =>
     a === 'Uncategorized' ? 1 : b === 'Uncategorized' ? -1 : a.localeCompare(b))
 
   useEffect(() => {
@@ -490,15 +490,27 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
           <div className="flex flex-col flex-1 min-h-0">
             <div className="flex justify-between items-center mb-2 flex-shrink-0">
               <p className="eyebrow">Knowledge base ({docs.length})</p>
-              <p style={{ fontSize: 9, fontFamily: 'var(--mono)', color: selectedDocs.length > 0 ? 'var(--accent)' : 'var(--text3)' }}>
-                {selectedDocs.length > 0 ? `${selectedDocs.length} selected` : 'all'}
-              </p>
+              <button className="chip" onClick={onOpenDocManager} style={{
+                color: 'var(--accent)', background: 'var(--glow)', border: '1px solid rgba(79,70,229,0.2)', cursor: 'pointer'
+              }}>Manage</button>
             </div>
+            {docs.length > 4 && (
+              <input
+                type="text"
+                value={docFilter}
+                placeholder="Find a document…"
+                className="vault-input"
+                style={{ minHeight: 30, fontSize: 12, border: '1px solid var(--border2)', background: 'var(--bg)', marginBottom: 8, flexShrink: 0 }}
+                onChange={e => setDocFilter(e.target.value)}
+              />
+            )}
             {docs.length === 0 ? (
               <p style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: '16px 0' }}>No documents yet</p>
+            ) : filteredFolderNames.length === 0 ? (
+              <p style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: '16px 0' }}>No matches</p>
             ) : (
               <div className="flex flex-col gap-2 overflow-y-auto">
-                {folderNames.map(folderName => (
+                {filteredFolderNames.map(folderName => (
                   <div key={folderName}>
                     <p className="eyebrow" style={{ marginBottom: 4, color: 'var(--text3)' }}>
                       {folderName} ({foldersMap.get(folderName)!.length})
@@ -507,51 +519,29 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
                       {foldersMap.get(folderName)!.map((doc, i) => (
                         <div key={doc.id} className={`doc-item tilt-card fade-up ${selectedDocs.includes(doc.id) ? 'active' : ''}`}
                           style={{ animationDelay: `${i * 0.04}s` }}
-                          onClick={() => onToggleDoc(doc.id)}>
+                          onClick={() => onToggleDoc(doc.id)}
+                          title={doc.filename}>
                           <input type="checkbox" checked={selectedDocs.includes(doc.id)} onChange={() => onToggleDoc(doc.id)}
                             onClick={e => e.stopPropagation()} style={{ flexShrink: 0, accentColor: 'var(--accent)', cursor: 'pointer' }} />
                           <div className="flex-1 min-w-0">
-                            <p style={{ fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</p>
+                            <p style={{ fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</p>
                             <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
                               {doc.chunk_count === -1
                                 ? <span style={{ color: 'var(--accent)' }}>⟳ Processing…</span>
                                 : `${doc.chunk_count} chunks`} · {new Date(doc.uploaded_at).toLocaleDateString()}
                             </p>
                           </div>
-                          {folderEditId === doc.id ? (
-                            <input
-                              autoFocus
-                              value={folderDraft}
-                              onClick={e => e.stopPropagation()}
-                              onChange={e => setFolderDraft(e.target.value)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') { onFolderChange(doc.id, folderDraft.trim() || null); setFolderEditId(null) }
-                                if (e.key === 'Escape') setFolderEditId(null)
-                              }}
-                              onBlur={() => { onFolderChange(doc.id, folderDraft.trim() || null); setFolderEditId(null) }}
-                              placeholder="Folder…"
-                              style={{ width: 70, fontSize: 10, background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 4, padding: '2px 4px', flexShrink: 0 }}
-                            />
-                          ) : (
-                            <button
-                              className="tap-target"
-                              title="Set folder"
-                              onClick={e => { e.stopPropagation(); setFolderEditId(doc.id); setFolderDraft(doc.folder || '') }}
-                              style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '0 2px' }}
-                            >🏷</button>
-                          )}
-                          <button
-                            className="tap-target"
-                            title="Delete document"
-                            onClick={e => { e.stopPropagation(); onDeleteDoc(doc.id, doc.filename) }}
-                            style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '0 2px' }}
-                          >🗑</button>
                         </div>
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
+            )}
+            {selectedDocs.length > 0 && (
+              <p style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--accent)', marginTop: 6, flexShrink: 0 }}>
+                {selectedDocs.length} selected for next question
+              </p>
             )}
           </div>
 
@@ -773,6 +763,104 @@ function MemoryModal({ notes, onAdd, onDelete, onClose }: {
   )
 }
 
+function DocumentManagerModal({ docs, onSetFolder, onDelete, onClose }: {
+  docs: Doc[]
+  onSetFolder: (id: string, folder: string | null) => void
+  onDelete: (id: string, filename: string) => void
+  onClose: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+
+  const filtered = docs.filter(d => d.filename.toLowerCase().includes(query.trim().toLowerCase()))
+  const sorted = [...filtered].sort((a, b) => a.filename.localeCompare(b.filename))
+
+  const saveFolder = (id: string) => {
+    onSetFolder(id, draft.trim() || null)
+    setEditingId(null)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(23,26,36,0.45)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-lg)',
+        boxShadow: 'var(--shadow-lift)', padding: 28, width: '100%', maxWidth: 620, maxHeight: '82vh', display: 'flex', flexDirection: 'column',
+      }}>
+        <p style={{ fontFamily: 'var(--serif)', fontSize: 22, fontStyle: 'italic', color: 'var(--text)', marginBottom: 4 }}>Manage documents</p>
+        <p style={{ fontSize: 12.5, color: 'var(--text3)', marginBottom: 16 }}>
+          {docs.length} document{docs.length === 1 ? '' : 's'} in your knowledge base. Organize into folders or remove ones you no longer need.
+        </p>
+
+        <input
+          type="text"
+          value={query}
+          placeholder="Search by document name…"
+          className="pref-field"
+          style={{ marginBottom: 14 }}
+          onChange={e => setQuery(e.target.value)}
+          autoFocus
+        />
+
+        <div className="flex flex-col gap-2" style={{ overflowY: 'auto', flex: 1 }}>
+          {sorted.length === 0 && (
+            <p style={{ fontSize: 12.5, color: 'var(--text3)', textAlign: 'center', padding: '24px 0' }}>
+              {docs.length === 0 ? 'No documents uploaded yet.' : 'No documents match your search.'}
+            </p>
+          )}
+          {sorted.map(doc => (
+            <div key={doc.id} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+              border: '1px solid var(--border)', borderRadius: 'var(--r-md)', background: 'var(--bg)'
+            }}>
+              <div className="flex-1 min-w-0">
+                <p style={{ fontSize: 13.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 3 }}>
+                  {doc.filename}
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                  {doc.chunk_count === -1
+                    ? <span style={{ color: 'var(--accent)' }}>⟳ Processing…</span>
+                    : `${doc.chunk_count} chunks`} · {new Date(doc.uploaded_at).toLocaleDateString()}
+                  {doc.folder && <> · <span style={{ color: 'var(--text2)' }}>{doc.folder}</span></>}
+                </p>
+              </div>
+
+              {editingId === doc.id ? (
+                <input
+                  autoFocus
+                  value={draft}
+                  onChange={e => setDraft(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') saveFolder(doc.id)
+                    if (e.key === 'Escape') setEditingId(null)
+                  }}
+                  onBlur={() => saveFolder(doc.id)}
+                  placeholder="Folder name…"
+                  style={{ width: 140, fontSize: 12, background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 6, padding: '6px 8px', flexShrink: 0 }}
+                />
+              ) : (
+                <button
+                  className="action-btn"
+                  style={{ width: 'auto', padding: '6px 12px', fontSize: 11.5, flexShrink: 0 }}
+                  onClick={() => { setEditingId(doc.id); setDraft(doc.folder || '') }}
+                >Folder</button>
+              )}
+
+              <button
+                className="action-btn"
+                style={{ width: 'auto', padding: '6px 12px', fontSize: 11.5, flexShrink: 0, color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                onClick={() => onDelete(doc.id, doc.filename)}
+              >Delete</button>
+            </div>
+          ))}
+        </div>
+
+        <button className="action-btn" style={{ marginTop: 16 }} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   const [sessionId, setSessionId] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
@@ -805,6 +893,7 @@ export default function Home() {
   const [onboardingRequired, setOnboardingRequired] = useState(false)
   const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
   const [showMemory, setShowMemory] = useState(false)
+  const [showDocManager, setShowDocManager] = useState(false)
   const [memoryNotes, setMemoryNotes] = useState<MemoryNote[]>([])
 
   useEffect(() => {
@@ -845,7 +934,9 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', preferences.theme.toLowerCase())
+    const t = preferences.theme.toLowerCase()
+    document.documentElement.setAttribute('data-theme', t)
+    try { localStorage.setItem('mv_theme', t) } catch { /* ignore */ }
   }, [preferences.theme])
 
   const handleSavePreferences = async (prefs: PreferencesState) => {
@@ -889,7 +980,7 @@ export default function Home() {
 
   const showToast = (msg: string, type: Toast['type'] = 'info') => {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), 4500)
   }
 
   const loadSessions = async () => {
@@ -978,7 +1069,13 @@ export default function Home() {
   const pollUploads = (pending: { id: string; filename: string }[]) => {
     let remaining = pending
     let attempts = 0
-    const maxAttempts = 40 // ~2 minutes at 3s interval
+    // Large/scanned documents can take several minutes to embed on a
+    // constrained server CPU (double embedding pass: sentence-level for
+    // semantic chunking, then chunk-level for storage) -- a short cap here
+    // silently stops polling while the backend keeps working, leaving the
+    // UI frozen on "Processing…" even after the document is actually done.
+    // ~10 minutes at 4s covers that without polling too aggressively.
+    const maxAttempts = 150
     const interval = setInterval(async () => {
       attempts++
       try {
@@ -992,12 +1089,19 @@ export default function Home() {
             showToast(`${p.filename} failed to process`, 'error')
             return false
           }
-          return found.chunk_count === -1
+          if (found.chunk_count !== -1) {
+            showToast(`${p.filename} ready — ${found.chunk_count} chunks`, 'success')
+            return false
+          }
+          return true
         })
       } catch { /* transient fetch failure -- try again next tick */ }
 
+      if (remaining.length > 0 && attempts >= maxAttempts) {
+        showToast(`Still processing ${remaining.map(r => r.filename).join(', ')} — reopen "Manage" to check later`, 'info')
+      }
       if (remaining.length === 0 || attempts >= maxAttempts) clearInterval(interval)
-    }, 3000)
+    }, 4000)
   }
 
   const handleUpload = async (files: File[]) => {
@@ -1200,8 +1304,7 @@ export default function Home() {
         onEditPreferences={() => { setOnboardingRequired(false); setShowOnboarding(true) }}
         onOpenMemory={openMemory}
         dailyTokenPct={dailyTokenPct}
-        onFolderChange={handleFolderChange}
-        onDeleteDoc={handleDeleteDoc}
+        onOpenDocManager={() => { setShowDocManager(true); loadDocs(false) }}
       />
 
       {showOnboarding && (
@@ -1222,6 +1325,15 @@ export default function Home() {
           onAdd={handleAddMemoryNote}
           onDelete={handleDeleteMemoryNote}
           onClose={() => setShowMemory(false)}
+        />
+      )}
+
+      {showDocManager && (
+        <DocumentManagerModal
+          docs={docs}
+          onSetFolder={handleFolderChange}
+          onDelete={handleDeleteDoc}
+          onClose={() => setShowDocManager(false)}
         />
       )}
 

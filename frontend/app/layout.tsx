@@ -32,6 +32,17 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${instrumentSerif.variable} ${plexMono.variable} ${epilogue.variable}`}>
+      <head>
+        {/* Applies the last-known theme synchronously, before first paint.
+            Without this, the page always starts in the CSS default (light)
+            and only switches once the /preferences fetch resolves, which
+            shows as a flash to dark for returning dark-theme users. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('mv_theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}})();`
+          }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   )

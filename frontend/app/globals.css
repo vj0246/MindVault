@@ -514,19 +514,22 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 
 .toast {
   position: fixed;
-  bottom: 24px;
+  bottom: 28px;
   left: 50%;
   transform: translateX(-50%);
   background: var(--text);
   border: 1px solid var(--text);
   border-radius: var(--r-md);
-  padding: 10px 18px;
+  padding: 13px 20px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--bg);
   z-index: 999;
   animation: fadeUp 0.22s ease;
-  white-space: nowrap;
+  white-space: normal;
+  max-width: min(90vw, 480px);
+  text-align: center;
   box-shadow: var(--shadow-lift);
 }
 .toast.success { background: var(--accent3); border-color: var(--accent3); color: #fff; }
