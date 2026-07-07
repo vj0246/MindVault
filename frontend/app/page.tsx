@@ -307,6 +307,7 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
   const [searchResults, setSearchResults] = useState<{ session_id: string; role: string; content: string; timestamp: string }[] | null>(null)
   const [searching, setSearching] = useState(false)
   const [docFilter, setDocFilter] = useState('')
+  const [sidebarTab, setSidebarTab] = useState<'docs' | 'chats'>('docs')
 
   const runSearch = async (q: string) => {
     if (!q.trim()) { setSearchResults(null); return }
@@ -394,7 +395,87 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
           </div>
         )}
         <div className="divider" />
-        <div className="flex flex-col gap-4 p-4 flex-1 min-h-0">
+        <div className="px-4 pt-3 flex-shrink-0">
+          <div className="segmented segmented-full">
+            <button className={`segmented-item ${sidebarTab === 'docs' ? 'active' : ''}`} onClick={() => setSidebarTab('docs')}>
+              Documents ({docs.length})
+            </button>
+            <button className={`segmented-item ${sidebarTab === 'chats' ? 'active' : ''}`} onClick={() => setSidebarTab('chats')}>
+              Chats ({sessions.length})
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 p-4 flex-1 min-h-0">
+          {sidebarTab === 'chats' ? (
+            <>
+              <div className="flex-shrink-0" style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  placeholder="Search past conversations…"
+                  className="vault-input"
+                  style={{ minHeight: 32, fontSize: 12, border: '1px solid var(--border2)', background: 'var(--bg)' }}
+                  onChange={e => { setSearchQuery(e.target.value); runSearch(e.target.value) }}
+                  onKeyDown={e => { if (e.key === 'Escape') { setSearchQuery(''); setSearchResults(null) } }}
+                />
+                {searchQuery && (searching || (searchResults && searchResults.length > 0)) && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 4,
+                    background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)',
+                    boxShadow: 'var(--shadow-md)', maxHeight: 240, overflowY: 'auto'
+                  }}>
+                    {searching && <p style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 10px' }}>Searching…</p>}
+                    {!searching && searchResults?.map((r, i) => (
+                      <div key={i} className="tap-target"
+                        onClick={() => { onSelectSession(r.session_id); setSearchQuery(''); setSearchResults(null) }}
+                        style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: i < searchResults.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <p style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>{sessionName(r.session_id)}</p>
+                        <p style={{ fontSize: 11, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {r.content.slice(0, 80)}
+                        </p>
+                      </div>
+                    ))}
+                    {!searching && searchResults && searchResults.length === 0 && (
+                      <p style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 10px' }}>No matches</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col flex-1 min-h-0">
+                <div className="flex justify-between items-center mb-2 flex-shrink-0">
+                  <p className="eyebrow">All chats</p>
+                  <button onClick={onNewSession} className="chip" style={{
+                    color: 'var(--accent)', background: 'var(--glow)', border: '1px solid rgba(79,70,229,0.2)', cursor: 'pointer'
+                  }}>+ New</button>
+                </div>
+                <div className="flex flex-col gap-0.5 overflow-y-auto">
+                  {sessions.map((s) => (
+                    <div key={s.id} onClick={() => onSelectSession(s.id)} className={`ledger-row ${s.id === sessionId ? 'active' : ''}`}>
+                      <span className="ledger-tick">{String(s.number ?? '·').padStart(2, '0')}</span>
+                      <span style={{
+                        fontSize: 11, color: s.id === sessionId ? 'var(--accent)' : 'var(--text2)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'var(--mono)'
+                      }}>
+                        {s.name.slice(0, 26)}{s.name.length > 26 ? '…' : ''}
+                      </span>
+                      <div className="flex gap-0.5 flex-shrink-0">
+                        <button onClick={e => { e.stopPropagation(); onShare(s.id) }} disabled={sharingId === s.id}
+                          title="Copy share link" className="tap-target"
+                          style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>
+                          {sharingId === s.id ? '…' : '🔗'}
+                        </button>
+                        <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }} className="tap-target"
+                          style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                  {sessions.length === 0 && <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>No chats yet</p>}
+                </div>
+              </div>
+            </>
+          ) : (
+          <div className="flex flex-col flex-1 min-h-0 gap-3">
           <div className="flex-shrink-0">
             <p className="eyebrow" style={{ marginBottom: 8 }}>Upload document</p>
             <div
@@ -410,81 +491,17 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
                   <p style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>{uploadStatus}</p>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-1 py-2">
-                  <span style={{ fontSize: 22, marginBottom: 2 }}>📄</span>
-                  <p style={{ fontSize: 12, color: 'var(--text2)' }}>Drop files or click</p>
-                  <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>PDF · TXT · MD · DOCX · Images</p>
+                <div className="flex items-center gap-2 py-1">
+                  <span style={{ fontSize: 18 }}>📄</span>
+                  <div className="min-w-0">
+                    <p style={{ fontSize: 12, color: 'var(--text2)' }}>Drop files or click</p>
+                    <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>PDF · TXT · MD · DOCX · Images</p>
+                  </div>
                 </div>
               )}
             </div>
             <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.docx,.doc,.jpg,.jpeg,.png,.gif,.webp" multiple className="hidden"
               onChange={(e) => { const files = Array.from(e.target.files || []); if (files.length) onUpload(files) }} />
-          </div>
-
-          <div className="flex-shrink-0" style={{ position: 'relative' }}>
-            <input
-              type="text"
-              value={searchQuery}
-              placeholder="Search past conversations…"
-              className="vault-input"
-              style={{ minHeight: 32, fontSize: 12, border: '1px solid var(--border2)', background: 'var(--bg)' }}
-              onChange={e => { setSearchQuery(e.target.value); runSearch(e.target.value) }}
-              onKeyDown={e => { if (e.key === 'Escape') { setSearchQuery(''); setSearchResults(null) } }}
-            />
-            {searchQuery && (searching || (searchResults && searchResults.length > 0)) && (
-              <div style={{
-                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 4,
-                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)',
-                boxShadow: 'var(--shadow-md)', maxHeight: 240, overflowY: 'auto'
-              }}>
-                {searching && <p style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 10px' }}>Searching…</p>}
-                {!searching && searchResults?.map((r, i) => (
-                  <div key={i} className="tap-target"
-                    onClick={() => { onSelectSession(r.session_id); setSearchQuery(''); setSearchResults(null) }}
-                    style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: i < searchResults.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <p style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--mono)' }}>{sessionName(r.session_id)}</p>
-                    <p style={{ fontSize: 11, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.content.slice(0, 80)}
-                    </p>
-                  </div>
-                ))}
-                {!searching && searchResults && searchResults.length === 0 && (
-                  <p style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 10px' }}>No matches</p>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-col flex-shrink-0" style={{ maxHeight: '30%' }}>
-            <div className="flex justify-between items-center mb-2 flex-shrink-0">
-              <p className="eyebrow">Chats ({sessions.length})</p>
-              <button onClick={onNewSession} className="chip" style={{
-                color: 'var(--accent)', background: 'var(--glow)', border: '1px solid rgba(79,70,229,0.2)', cursor: 'pointer'
-              }}>+ New</button>
-            </div>
-            <div className="flex flex-col gap-0.5 overflow-y-auto">
-              {sessions.map((s) => (
-                <div key={s.id} onClick={() => onSelectSession(s.id)} className={`ledger-row ${s.id === sessionId ? 'active' : ''}`}>
-                  <span className="ledger-tick">{String(s.number ?? '·').padStart(2, '0')}</span>
-                  <span style={{
-                    fontSize: 11, color: s.id === sessionId ? 'var(--accent)' : 'var(--text2)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'var(--mono)'
-                  }}>
-                    {s.name.slice(0, 26)}{s.name.length > 26 ? '…' : ''}
-                  </span>
-                  <div className="flex gap-0.5 flex-shrink-0">
-                    <button onClick={e => { e.stopPropagation(); onShare(s.id) }} disabled={sharingId === s.id}
-                      title="Copy share link" className="tap-target"
-                      style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>
-                      {sharingId === s.id ? '…' : '🔗'}
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); onDeleteSession(s.id) }} className="tap-target"
-                      style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}>✕</button>
-                  </div>
-                </div>
-              ))}
-              {sessions.length === 0 && <p style={{ fontSize: 10, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>No chats yet</p>}
-            </div>
           </div>
 
           <div className="flex flex-col flex-1 min-h-0">
@@ -544,6 +561,8 @@ function Sidebar({ docs, onUpload, uploading, uploadStatus, sessionId, msgCount,
               </p>
             )}
           </div>
+          </div>
+          )}
 
           <div className="flex flex-col gap-2 flex-shrink-0">
             <div className="flex gap-2">

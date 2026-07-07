@@ -222,6 +222,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   color: var(--accent);
   box-shadow: var(--shadow-sm);
 }
+.segmented.segmented-full { display: flex; width: 100%; }
+.segmented.segmented-full .segmented-item { flex: 1; text-align: center; }
 
 .graph-btn {
   font-family: var(--mono);
