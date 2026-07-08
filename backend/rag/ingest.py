@@ -260,19 +260,37 @@ def chunk_documents(pages, filename="") -> list:
     full_text = "\n\n".join([p.page_content for p in pages])
     print(f"[Ingest] Smart chunking: {len(full_text)} chars, file={filename}")
 
-    text_clean, protected = _protect_blocks(full_text)
-    sections = _parse_sections(text_clean)
-
+    # Semantic splitting runs fastembed (real CPU-bound inference) once per
+    # section during splitting, on top of the second full embedding pass
+    # embed_and_store() does afterward for storage -- fine for typical
+    # documents, but on Render's free single-vCPU tier a large document's
+    # worth of sentence embeddings can peg the only core long enough that
+    # Render's own health check starves and force-restarts the container
+    # mid-ingestion (confirmed via Render logs: "[Ingest] Smart chunking..."
+    # printed, then Render's startup banner immediately after -- the
+    # platform killed the process, not a Python-level hang). Past this size,
+    # skip straight to the cheap fixed-size splitter below -- no embedding
+    # calls during splitting at all, trading some chunk-boundary quality on
+    # large documents for actually finishing.
+    LARGE_DOC_CHAR_THRESHOLD = 20000
     raw_chunks = []
-    for heading, body in sections:
-        if not body.strip():
-            # Section heading with no body — skip or attach to next (skip for now)
-            continue
-        raw_chunks.extend(_process_block(body, heading, protected))
+    if len(full_text) <= LARGE_DOC_CHAR_THRESHOLD:
+        text_clean, protected = _protect_blocks(full_text)
+        sections = _parse_sections(text_clean)
 
-    # Fallback: if zero chunks produced, use simple fixed splitter
+        for heading, body in sections:
+            if not body.strip():
+                # Section heading with no body — skip or attach to next (skip for now)
+                continue
+            raw_chunks.extend(_process_block(body, heading, protected))
+    else:
+        print(f"[Ingest] {len(full_text)} chars exceeds {LARGE_DOC_CHAR_THRESHOLD} -- skipping semantic splitting, using fixed split")
+
+    # Fallback: if zero chunks produced (large doc bypass above, or smart
+    # chunker genuinely found none), use simple fixed splitter
     if not raw_chunks:
-        print("[Ingest] Smart chunker produced 0 chunks — falling back to fixed split")
+        if len(full_text) <= LARGE_DOC_CHAR_THRESHOLD:
+            print("[Ingest] Smart chunker produced 0 chunks — falling back to fixed split")
         from langchain_text_splitters import RecursiveCharacterTextSplitter
         splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
         return splitter.split_documents(pages)
