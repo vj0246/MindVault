@@ -35,12 +35,6 @@ HEADING_RE = re.compile(
     re.MULTILINE
 )
 
-# Markdown tables: header row | separator row | data rows
-TABLE_RE = re.compile(
-    r'(\|.+\|\s*\n\|[-:\s|]+\|\s*\n(?:\|.+\|\s*\n)+)',
-    re.MULTILINE
-)
-
 # Fenced code blocks
 CODE_RE = re.compile(r'```[\s\S]*?```', re.MULTILINE)
 
@@ -144,6 +138,41 @@ def _semantic_split(text: str, header: str = "", max_chars=600, min_chars=150, t
     return [c for c in chunks if len(c.strip()) > 30]
 
 
+def _is_table_row(line: str) -> bool:
+    s = line.strip()
+    return len(s) >= 2 and s.startswith('|') and s.endswith('|')
+
+
+def _is_table_separator(line: str) -> bool:
+    s = line.strip()
+    return bool(s) and _is_table_row(s) and set(s) <= set('|-: \t')
+
+
+def _find_table_blocks(text: str) -> list:
+    """Line-based table detection -- deliberately not a regex. The
+    previous TABLE_RE (`(?:\\|.+\\|\\s*\\n)+`) nests an unbounded
+    quantifier inside a repeated group over pipe-delimited lines --
+    classic catastrophic-backtracking shape. A document with lots of
+    '|' characters (shell pipes, ASCII diagrams -- exactly what OS/CS
+    notes tend to have) could make it run for a very long time, and
+    since CPython's re engine doesn't release the GIL mid-match, it
+    can stall the whole process, not just the one request. Line
+    scanning is O(n) and can't blow up regardless of content."""
+    lines = text.split('\n')
+    blocks = []
+    i, n = 0, len(lines)
+    while i < n:
+        if _is_table_row(lines[i]) and i + 1 < n and _is_table_separator(lines[i + 1]):
+            start = i
+            i += 2
+            while i < n and _is_table_row(lines[i]):
+                i += 1
+            blocks.append('\n'.join(lines[start:i]))
+        else:
+            i += 1
+    return blocks
+
+
 def _protect_blocks(text: str):
     """
     Replaces tables and code blocks with placeholders.
@@ -157,7 +186,11 @@ def _protect_blocks(text: str):
         store[key] = m.group(0).strip()
         return f"\n{key}\n"
 
-    text = TABLE_RE.sub(lambda m: _sub(m, "TABLE"), text)
+    for block in _find_table_blocks(text):
+        key = f"__TABLE_{len(store)}__"
+        store[key] = block.strip()
+        text = text.replace(block, f"\n{key}\n", 1)
+
     text = CODE_RE.sub(lambda m: _sub(m, "CODE"), text)
     return text, store
 
