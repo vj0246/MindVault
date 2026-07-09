@@ -317,7 +317,18 @@ def embed_and_store(chunks, document_id: str, filename: str, user_id: str):
 
     supabase = get_supabase()
     texts = [c.page_content for c in chunks]
-    embeddings = list(EMBED_MODEL.embed(texts))
+
+    # Embedding all texts in one fastembed call spikes transient memory
+    # proportional to the whole document's chunk count -- fine for small
+    # docs, but Render's free tier sits right at a 512MB ceiling with the
+    # model already resident (see EMBED_MODEL comment in embedder.py).
+    # Confirmed via Render logs: a ~90-chunk document reliably got the
+    # container OOM-killed/restarted right around this call. Embedding in
+    # small sub-batches caps peak memory regardless of total document size.
+    EMBED_BATCH_SIZE = 16
+    embeddings = []
+    for i in range(0, len(texts), EMBED_BATCH_SIZE):
+        embeddings.extend(EMBED_MODEL.embed(texts[i:i + EMBED_BATCH_SIZE]))
 
     rows = [
         {
