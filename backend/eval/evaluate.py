@@ -244,6 +244,17 @@ scores = {
 overall = round(sum(scores.values()) / len(scores), 4)
 
 
+# ── Save first -- a display/encoding crash below must never cost the
+# actual RAGAS judge results, which just spent real Groq quota to compute.
+ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results_final")
+os.makedirs(out_dir, exist_ok=True)
+out_path = os.path.join(out_dir, f"eval_{ts}.json")
+with open(out_path, "w") as f:
+    json.dump({"timestamp": ts, "scores": scores, "overall": overall,
+               "per_question": records}, f, indent=2)
+print(f"\n[Eval] Saved -> {out_path}")
+
 # ── Results ──────────────────────────────────────────────────────────────
 print("\n" + "=" * 65)
 print("  RAGAS EVALUATION -- MindVault (in-process)")
@@ -253,7 +264,11 @@ try:
     from tabulate import tabulate
     rows = [[m, s, _grade(s)] for m, s in scores.items()]
     rows += [["-"*22, "-"*6, "-"*12], ["OVERALL", overall, _grade(overall)]]
-    print(tabulate(rows, headers=["Metric", "Score", "Grade"], tablefmt="rounded_outline"))
+    # "grid" is plain ASCII (+/-/|) -- tablefmt options with box-drawing
+    # unicode (e.g. rounded_outline) crash print() on Windows cp1252
+    # stdout, same class of bug as the ingest.py arrow character earlier
+    # this project fixed.
+    print(tabulate(rows, headers=["Metric", "Score", "Grade"], tablefmt="grid"))
 except ImportError:
     for m, s in scores.items():
         print(f"  {m:<25} {s:.4f}  {_grade(s)}")
@@ -273,13 +288,3 @@ print("  context_precision -> are retrieved chunks relevant")
 print("  context_recall    -> did retrieval find all needed chunks")
 print("  <0.5 needs work | 0.5-0.7 ok | >0.7 good | >0.9 excellent")
 print("=" * 65)
-
-# Save
-ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results_final")
-os.makedirs(out_dir, exist_ok=True)
-out_path = os.path.join(out_dir, f"eval_{ts}.json")
-with open(out_path, "w") as f:
-    json.dump({"timestamp": ts, "scores": scores, "overall": overall,
-               "per_question": records}, f, indent=2)
-print(f"\n[Eval] Saved -> {out_path}")
