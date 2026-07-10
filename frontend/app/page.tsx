@@ -116,13 +116,19 @@ const MODES: { value: Mode; label: string; desc: string }[] = [
 function getDynamicSuggestions(docs: Doc[]) {
   if (docs.length === 0) return []
   const names = docs.map(d => d.filename.replace(/\.[^.]+$/, '').slice(0, 30))
+  // docs is ordered most-recently-uploaded-first -- indices 0/1 alone meant
+  // every suggestion but one pointed at the same one or two newest uploads,
+  // no matter how large the rest of the vault was. Spreading across
+  // indices 0-3 (wrapping via modulo for small vaults) surfaces the whole
+  // knowledge base instead of just the latest document.
+  const pick = (i: number) => names[i % names.length]
   return [
-    { label: `Summarize ${names[0]}`, intent: 'summarize' },
-    { label: `Generate MCQs from ${names[0]}`, intent: 'test' },
-    { label: `What are the key concepts in ${names[0]}?`, intent: 'answer' },
+    { label: `Summarize ${pick(0)}`, intent: 'summarize' },
+    { label: `Generate MCQs from ${pick(1)}`, intent: 'test' },
+    { label: `What are the key concepts in ${pick(2)}?`, intent: 'answer' },
     docs.length > 1
-      ? { label: `Compare ${names[0]} and ${names[1]}`, intent: 'compare' }
-      : { label: `Explain the main topics in ${names[0]}`, intent: 'answer' },
+      ? { label: `Compare ${pick(0)} and ${pick(Math.min(3, docs.length - 1))}`, intent: 'compare' }
+      : { label: `Explain the main topics in ${pick(0)}`, intent: 'answer' },
   ]
 }
 

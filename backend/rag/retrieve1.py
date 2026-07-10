@@ -495,7 +495,7 @@ def build_retrieval_chain(mode: str = "default", user_id: str = None, document_i
     # is known.
     @traceable(name=f"answer_chain[{mode}]", run_type="chain")
     def run_chain(input: dict) -> dict:
-        retrieved = retrieve_context(input["question"], k=8, user_id=user_id, document_ids=document_ids)
+        retrieved = retrieve_context(input["question"], k=6, user_id=user_id, document_ids=document_ids)
         grounded = bool(retrieved["context"]) and retrieved.get("confidence", 0.0) >= CONFIDENCE_THRESHOLD
 
         system_prompt = _build_mode_system_prompt(mode, grounded, hint)
@@ -646,7 +646,7 @@ def _prepare_attachment_answer(question: str, attachment_text: str, attachment_n
     stream() variants; only how the LLM is called differs."""
     # Normal RAG retrieval still runs, so the attachment is *additional*
     # context on top of the user's existing documents, not a replacement.
-    retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
+    retrieved = retrieve_context(question, k=6, user_id=user_id, document_ids=document_ids)
 
     # Cap attachment text -- vision descriptions are already capped at the
     # source (max_tokens=2000 in load_image_via_groq); for text documents,
@@ -757,6 +757,16 @@ def query_rag(question: str, history: list = [], mode: str = "default", user_id:
     # is self-contained and a cheap keyword+single-word-LLM classify is enough.
     has_reference = history and any(w in question.lower() for w in REFERENCE_WORDS)
 
+    # A short question ("deadlock?", "PCB fields") is often under-specified
+    # for retrieval even with no conversation history to resolve against --
+    # rewriting it into a fuller, more explicit form (still the same
+    # resolve_and_classify call) tends to retrieve better. Longer questions
+    # are usually already explicit enough that rewriting adds latency
+    # without changing retrieval quality, so this stays a targeted trigger,
+    # not an unconditional rewrite-every-query pass.
+    is_vague = len(question.split()) <= 4
+    needs_rewrite = has_reference or is_vague
+
     # Cache only applies to standalone questions -- same reasoning as
     # stream_rag's cache gate: a reference-dependent follow-up means
     # different things depending on prior conversation, so it can't be
@@ -780,7 +790,7 @@ def query_rag(question: str, history: list = [], mode: str = "default", user_id:
                 "tokens": {"message": None, "daily_used": 0, "daily_pct": 0},
             }
 
-    if has_reference:
+    if needs_rewrite:
         combined = resolve_and_classify(question, history)
         resolved_question = combined["resolved"]
         intent = combined["intent"]
@@ -898,6 +908,8 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
     # conversation. Standalone questions get a cheap classify_intent() call
     # instead of the combined resolve+classify call.
     has_reference = history and any(w in question.lower() for w in REFERENCE_WORDS)
+    is_vague = len(question.split()) <= 4
+    needs_rewrite = has_reference or is_vague
 
     # Cache only applies to standalone questions -- a reference-dependent
     # follow-up ("elaborate on that") means different things depending on
@@ -921,7 +933,7 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
             yield f'data: {json.dumps({"type": "done", "related_concepts": cached.get("related_concepts", []), "full_answer": cached_answer, "answer_type": cached.get("answer_type", "grounded"), "tokens": {"message": None, "daily_used": 0, "daily_pct": 0}})}\n\n'
             return
 
-    if has_reference:
+    if needs_rewrite:
         combined = resolve_and_classify(question, history)
         resolved_question = combined["resolved"]
         intent = combined["intent"]
@@ -996,7 +1008,7 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
         return
 
     # Answer intent — retrieve context then STREAM the LLM tokens
-    retrieved = retrieve_context(resolved_question, k=8, user_id=user_id, document_ids=document_ids)
+    retrieved = retrieve_context(resolved_question, k=6, user_id=user_id, document_ids=document_ids)
     grounded = bool(retrieved["context"]) and retrieved.get("confidence", 0.0) >= CONFIDENCE_THRESHOLD
     answer_type = "grounded" if grounded else "general_knowledge"
     sources = retrieved.get("sources", []) if grounded else []
