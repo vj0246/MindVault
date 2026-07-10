@@ -41,7 +41,7 @@ def migrate():
     migrated = 0
 
     while offset < total:
-        print(f"[Migrate] Fetching {offset}–{offset + BATCH_SIZE}...")
+        print(f"[Migrate] Fetching {offset}-{offset + BATCH_SIZE}...")
         res = supabase.table("chunks")\
             .select("id, content")\
             .range(offset, offset + BATCH_SIZE - 1)\

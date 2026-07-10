@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic'
 import { getSupabase, signOut } from '../lib/supabase'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import GraphPanel from '../components/GraphPanel'
 import {
   uploadDocument,
@@ -249,7 +250,7 @@ function MessageBubble({ msg, onConceptClick }: {
           </span>
         )}
       </div>
-      <div className="md"><ReactMarkdown>{msg.content.replace(/^\[General knowledge\]\s*\n*/, '')}</ReactMarkdown></div>
+      <div className="md"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content.replace(/^\[General knowledge\]\s*\n*/, '')}</ReactMarkdown></div>
       {msg.unverified && (
         <p className="eyebrow" style={{ marginTop: 6, textTransform: 'none', letterSpacing: 0, color: 'var(--danger)' }}>
           ⚠ This answer may not be fully supported by your uploaded documents.

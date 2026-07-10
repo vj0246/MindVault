@@ -403,7 +403,19 @@ def _preference_hint(user_id: str = None) -> str:
 # model's own reasoning ability for no benefit. Instead we let it answer
 # from general knowledge, but require it to say so explicitly so the answer
 # is never mistaken for something sourced from the user's documents.
-CONFIDENCE_THRESHOLD = 0.35
+# Raised from 0.35 -- eval baseline (faithfulness 0.69) showed weakly-relevant
+# retrievals still passing the grounded gate, letting the model answer from
+# thin/noisy context instead of falling back cleanly. Not exhaustively swept
+# against multiple values (Groq free-tier quota), validated via the combined
+# before/after eval run instead.
+CONFIDENCE_THRESHOLD = 0.45
+
+# Self-RAG verification is a second sequential Groq call on every grounded
+# answer -- real added latency. Retrieval confidence already correlates with
+# how well-supported an answer is likely to be; past this bar, skip the
+# extra round-trip and trust the STRICT RULE prompting alone. Below it,
+# still verify -- that's exactly the borderline case the check exists for.
+SELF_RAG_SKIP_CONFIDENCE = 0.75
 
 SAFE_REFUSAL = "This isn't in your uploaded documents."
 
@@ -431,10 +443,22 @@ _MODE_VOICE = {
     "default": "Be clear and concise.",
 }
 
+# Prompt-only, zero extra latency/cost -- the frontend already renders GFM
+# markdown tables. Nudging structured formatting only where it genuinely
+# fits (comparisons, multi-attribute data) avoids forcing tables onto
+# answers that read better as prose.
+STRUCTURE_RULE = (
+    "When the answer involves comparing multiple items, listing steps, or "
+    "presenting multi-attribute data, use a markdown table or bullet list "
+    "instead of a paragraph -- it renders as a real table/list in the UI. "
+    "For a single fact or short explanation, plain prose is better; don't "
+    "force structure where it doesn't fit."
+)
+
 def _build_mode_system_prompt(mode: str, grounded: bool, hint: str) -> str:
     rule = GROUNDING_RULE if grounded else GENERAL_KNOWLEDGE_RULE
     voice = _MODE_VOICE.get(mode, _MODE_VOICE["default"])
-    parts = [rule, voice, "Maximum 150 words unless detail is specifically asked for."]
+    parts = [rule, STRUCTURE_RULE, voice, "Maximum 150 words unless detail is specifically asked for."]
     if hint:
         parts.append(hint)
     parts.append("Context: {context}\nQuestion: {question}\nAnswer:")
@@ -471,7 +495,7 @@ def build_retrieval_chain(mode: str = "default", user_id: str = None, document_i
     # is known.
     @traceable(name=f"answer_chain[{mode}]", run_type="chain")
     def run_chain(input: dict) -> dict:
-        retrieved = retrieve_context(input["question"], k=5, user_id=user_id, document_ids=document_ids)
+        retrieved = retrieve_context(input["question"], k=8, user_id=user_id, document_ids=document_ids)
         grounded = bool(retrieved["context"]) and retrieved.get("confidence", 0.0) >= CONFIDENCE_THRESHOLD
 
         system_prompt = _build_mode_system_prompt(mode, grounded, hint)
@@ -494,7 +518,8 @@ def build_retrieval_chain(mode: str = "default", user_id: str = None, document_i
         usage = getattr(message, "usage_metadata", None)
         total_tokens = usage.get("total_tokens") if usage else None
 
-        if grounded and not _verify_grounded(retrieved["context"], answer):
+        needs_verify = grounded and retrieved.get("confidence", 0.0) < SELF_RAG_SKIP_CONFIDENCE
+        if needs_verify and not _verify_grounded(retrieved["context"], answer):
             answer = SAFE_REFUSAL
 
         return {
@@ -543,7 +568,10 @@ def comparison_chain(question: str, mode: str = "default", user_id: str = None, 
 
     prompt = ChatPromptTemplate.from_template("""
 Compare using ONLY the context below. Never use outside knowledge or assumptions.
-Structure your response as:
+
+If the items being compared share clear attributes (e.g. size, cost, behavior),
+present the comparison as a markdown table with one row per attribute --
+it renders as a real table in the UI, not raw text. Otherwise use:
 
 **Similarities:**
 - point 1
@@ -618,7 +646,7 @@ def _prepare_attachment_answer(question: str, attachment_text: str, attachment_n
     stream() variants; only how the LLM is called differs."""
     # Normal RAG retrieval still runs, so the attachment is *additional*
     # context on top of the user's existing documents, not a replacement.
-    retrieved = retrieve_context(question, k=5, user_id=user_id, document_ids=document_ids)
+    retrieved = retrieve_context(question, k=8, user_id=user_id, document_ids=document_ids)
 
     # Cap attachment text -- vision descriptions are already capped at the
     # source (max_tokens=2000 in load_image_via_groq); for text documents,
@@ -968,7 +996,7 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
         return
 
     # Answer intent — retrieve context then STREAM the LLM tokens
-    retrieved = retrieve_context(resolved_question, k=5, user_id=user_id, document_ids=document_ids)
+    retrieved = retrieve_context(resolved_question, k=8, user_id=user_id, document_ids=document_ids)
     grounded = bool(retrieved["context"]) and retrieved.get("confidence", 0.0) >= CONFIDENCE_THRESHOLD
     answer_type = "grounded" if grounded else "general_knowledge"
     sources = retrieved.get("sources", []) if grounded else []
@@ -1011,7 +1039,7 @@ def stream_rag(question: str, history: list = [], mode: str = "default",
     # does) this emits a follow-up warning event the frontend can show as a
     # disclaimer banner under the already-rendered message.
     verified = True
-    if grounded:
+    if grounded and retrieved.get("confidence", 0.0) < SELF_RAG_SKIP_CONFIDENCE:
         verified = _verify_grounded(retrieved["context"], full_answer)
         if not verified:
             yield f'data: {json.dumps({"type": "warning", "message": "This answer may not be fully supported by your uploaded documents."})}\n\n'

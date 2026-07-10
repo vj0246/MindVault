@@ -100,7 +100,7 @@ def _split_sentences(text: str) -> list:
     return [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if len(s.strip()) > 15]
 
 
-def _semantic_split(text: str, header: str = "", max_chars=600, min_chars=150, threshold=0.65) -> list:
+def _semantic_split(text: str, header: str = "", max_chars=900, min_chars=200, threshold=0.65) -> list:
     """
     Splits text into semantically coherent chunks.
     Embeds sentences, splits where similarity drops below threshold or chunk exceeds max_chars.
@@ -290,9 +290,15 @@ def chunk_documents(pages, filename="") -> list:
     # chunker genuinely found none), use simple fixed splitter
     if not raw_chunks:
         if len(full_text) <= LARGE_DOC_CHAR_THRESHOLD:
-            print("[Ingest] Smart chunker produced 0 chunks — falling back to fixed split")
+            print("[Ingest] Smart chunker produced 0 chunks -- falling back to fixed split")
         from langchain_text_splitters import RecursiveCharacterTextSplitter
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        # 1000/150 (~15% overlap) instead of the previous 500/50 -- larger
+        # chunks fragment concepts less, directly targeting low context_recall
+        # (0.56 in the eval baseline). Standard RAG-QA sweet spot; not
+        # exhaustively grid-searched against this doc set (Groq free-tier
+        # quota makes a full sweep impractical), validated instead via the
+        # combined before/after eval run.
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
         return splitter.split_documents(pages)
 
     docs = [
