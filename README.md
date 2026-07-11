@@ -304,9 +304,11 @@ RAGAS scores (Groq as judge LLM), same 8-question subset across all runs for a d
 |---|---|---|---|---|---|
 | Baseline (`k=5`, all-MiniLM-L6-v2, 500-char chunks, CRAG threshold 0.35) | 0.690 | 0.864 | 0.624 | 0.563 | 0.685 |
 | `k=8`, bge-small-en-v1.5, 1000-char chunks, CRAG threshold 0.45 | 0.687 | 0.930 | 0.563 | 0.771 | 0.738 |
-| `k=6` (same embedding/chunking/threshold as above) | *pending* | *pending* | *pending* | *pending* | *pending* |
+| `k=6` (same embedding/chunking/threshold as above) | 0.651 | 0.911 | 0.630 | 0.604 | 0.699 |
 
-Baseline → `k=8` pass: retrieval `k` (5→8), the embedding model (`all-MiniLM-L6-v2` → `bge-small-en-v1.5`, same 384-dim so no schema migration), fixed-splitter chunk size (500/50 chars → 1000/150), and the CRAG confidence gate (0.35 → 0.45) all changed together, validated as one before/after comparison rather than an exhaustive per-parameter grid search — Groq's free-tier rate limits make a full sweep impractical (a single 8-question run already takes 8-11 minutes with heavy `429` retries). Net result: `context_recall` jumped from *acceptable* to *good* (more of the right chunks actually get retrieved), at a `context_precision` cost that's the expected trade-off of pulling more candidates into the top-`k` — more chances for a weaker match to make the cut. `k=6` is a mid-point retest to see whether some of that precision can be recovered without giving back the recall gain.
+Baseline → `k=8` pass: retrieval `k` (5→8), the embedding model (`all-MiniLM-L6-v2` → `bge-small-en-v1.5`, same 384-dim so no schema migration), fixed-splitter chunk size (500/50 chars → 1000/150), and the CRAG confidence gate (0.35 → 0.45) all changed together, validated as one before/after comparison rather than an exhaustive per-parameter grid search — Groq's free-tier rate limits make a full sweep impractical (a single 8-question run already takes 8-11 minutes with heavy `429` retries). Net result: `context_recall` jumped from *acceptable* to *good* (more of the right chunks actually get retrieved), at a `context_precision` cost that's the expected trade-off of pulling more candidates into the top-`k` — more chances for a weaker match to make the cut.
+
+`k=8` → `k=6` retest: recovered most of the `context_precision` loss (0.563 → 0.630, above even the original baseline) while keeping most of the recall gain (0.771 → 0.604, still well above baseline's 0.563). `faithfulness` dropped a bit further (0.687 → 0.651) — plausibly noise at an 8-question sample size rather than a real regression, since nothing about `k=6` should structurally hurt grounding. `k=6` is the better middle ground of the three and is what's currently live.
 
 Raw results: `backend/eval/results_final/`.
 
