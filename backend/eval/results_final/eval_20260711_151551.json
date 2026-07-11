@@ -1,0 +1,166 @@
+{
+  "timestamp": "20260711_151551",
+  "scores": {
+    "faithfulness": 0.6508,
+    "answer_relevancy": 0.9113,
+    "context_precision": 0.63,
+    "context_recall": 0.6042
+  },
+  "overall": 0.6991,
+  "per_question": [
+    {
+      "question": "What is the difference between a program and a process?",
+      "answer": "**Similarities:**\n- Both are related to executable code\n- Both are entities in an operating system\n\n**Differences:**\n- A program is a passive entity stored on disk, while a process is an active entity running in memory\n- A program does not perform actions, while a process performs execution\n- A program is static, while a process is dynamic\n- A program is stored on disk, while a process resides in main memory\n\n**Key Insight:**\nA program becomes a process when it is loaded into memory and begins execution, transforming from a passive to an active entity.",
+      "contexts": [
+        "Process in Operating System \n\ud83d\udd39 Definition \nA Process is a program in execution. \nA Program is a passive entity stored on disk (in the form of an executable file), whereas \na Process is an active entit",
+        "Process in Operating System\n\n\ud83d\udd39 Definition\n\nA Process is a program in execution.\n\nA Program is a passive entity stored on disk (in the form of an executable file), whereas\n\na Process is an active entit",
+        "\ud83d\udd39 Advantages of Threads \n\u2022 Faster context switching than processes \n\u2022 Efficient resource sharing \n\u2022 Better CPU utilization \n\u2022 Improves application responsiveness \n \nDifference Between Process and Thre",
+        "concurrently by the operating system.\n\n\ud83d\udd39 Key Characteristics of a Thread\n\n\u2022 Exists within a process\n\n\u2022 Shares memory and resources of the parent process\n\n\u2022 Has its own:\n\no Program Counter\n\no Register ",
+        "processes. \nTerminologies used in Process Control Block \n\u2022 Process state: Stores whether the process is running, waiting, ready, or terminated \n\u2022 Process number Or PID: Every process is assigned a uni",
+        "Operations on a Process \nIn an Operating System, various operations can be performed on a process during its \nlifecycle. These operations are managed by the OS to ensure proper execution and \nresource",
+        "\u2022 Assigns CPU for execution\n\n\ud83d\udd39 Multiple Processes from Same Program\n\nOne program can create multiple processes.\n\nExample:\u2022 Multiple users opening the same web browser.\n\n\u2022 Opening multiple instances of",
+        "\ud83d\udd39 How a Program Becomes a Process \nExecution of a program can be started by: \n\u2022 GUI mouse clicks (e.g., double-clicking an application) \n\u2022 Command-line entry of its name \n\u2022 System call by another prog"
+      ],
+      "ground_truth": "A program is a passive entity stored on disk. A process is an active entity running in memory. A program becomes a process when loaded into memory and execution begins.",
+      "confidence": 1.0,
+      "answer_type": "grounded",
+      "sources": [
+        "fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx",
+        "6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf"
+      ]
+    },
+    {
+      "question": "How does a program become a process?",
+      "answer": "A program becomes a process when it is loaded into memory and begins execution. This can be started by:\n* **GUI mouse clicks** (e.g., double-clicking an application)\n* **Command-line entry** of its name\n* **System call** by another program\n* **Batch execution**\nWhen execution starts, the OS:\n* Loads the program into **RAM**\n* Allocates necessary **resources**\n* Creates a **Process Control Block (PCB)**\n* Assigns **CPU** for execution [Doc: 6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf]",
+      "contexts": [
+        "\ud83d\udd39 How a Program Becomes a Process \nExecution of a program can be started by: \n\u2022 GUI mouse clicks (e.g., double-clicking an application) \n\u2022 Command-line entry of its name \n\u2022 System call by another prog",
+        "Process in Operating System\n\n\ud83d\udd39 Definition\n\nA Process is a program in execution.\n\nA Program is a passive entity stored on disk (in the form of an executable file), whereas\n\na Process is an active entit",
+        "Process in Operating System \n\ud83d\udd39 Definition \nA Process is a program in execution. \nA Program is a passive entity stored on disk (in the form of an executable file), whereas \na Process is an active entit",
+        "In an Operating System, various operations can be performed on a process during its\n\nlifecycle. These operations are managed by the OS to ensure proper execution and\n\nresource utilization.\n\n\ud83d\udd39 1\ufe0f Proce",
+        "\u2022 Assigns CPU for execution\n\n\ud83d\udd39 Multiple Processes from Same Program\n\nOne program can create multiple processes.\n\nExample:\u2022 Multiple users opening the same web browser.\n\n\u2022 Opening multiple instances of",
+        "Operations on a Process \nIn an Operating System, various operations can be performed on a process during its \nlifecycle. These operations are managed by the OS to ensure proper execution and \nresource"
+      ],
+      "ground_truth": "When execution starts, the OS loads the program into RAM, allocates resources, creates a Process Control Block (PCB), and assigns the CPU for execution.",
+      "confidence": 1.0,
+      "answer_type": "grounded",
+      "sources": [
+        "fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx",
+        "6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf"
+      ]
+    },
+    {
+      "question": "Can one program create multiple processes? Give an example.",
+      "answer": "* Yes, one program can create multiple processes.\n* Example: \n  + Multiple users opening the same web browser\n  + Opening multiple instances of MS Word\n  + Running the same program by different users [Doc: fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx]",
+      "contexts": [
+        "\u2022 Assigns CPU for execution\n\n\ud83d\udd39 Multiple Processes from Same Program\n\nOne program can create multiple processes.\n\nExample:\u2022 Multiple users opening the same web browser.\n\n\u2022 Opening multiple instances of",
+        "\ud83d\udd39 How a Program Becomes a Process \nExecution of a program can be started by: \n\u2022 GUI mouse clicks (e.g., double-clicking an application) \n\u2022 Command-line entry of its name \n\u2022 System call by another prog",
+        "\u2022 Multiple users opening the same web browser. \n\u2022 Opening multiple instances of MS Word. \n\u2022 Running the same program by different users. \nEach process: \n\u2022 Has its own memory space \n\u2022 Has its own regis",
+        "Process in Operating System\n\n\ud83d\udd39 Definition\n\nA Process is a program in execution.\n\nA Program is a passive entity stored on disk (in the form of an executable file), whereas\n\na Process is an active entit",
+        "\u2022 New -> Ready: The system will move the process from new to ready state and now\n\nit is ready for execution. Here a system may set a limit so that multiple processes\n\ncan't occur otherwise there may b",
+        "\u2022 Stack Space \nThis allows multiple threads to execute different parts of a program simultaneously. \nSimilarly, each process also has its own: \n\u2022 Memory space \n\u2022 Registers \n\u2022 Stack \n\u2022 Resources \n \n \n "
+      ],
+      "ground_truth": "Yes. Multiple users opening the same web browser creates separate processes. Each has its own memory space, registers, and program counter.",
+      "confidence": 0.837,
+      "answer_type": "grounded",
+      "sources": [
+        "fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx",
+        "6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf"
+      ]
+    },
+    {
+      "question": "What are the five states of a process?",
+      "answer": "The five states of a process are:\n* **New**: The process is being created.\n* **Ready**: The process is ready to execute and is waiting in the ready queue for CPU allocation.\n* **Running**: The process is currently being executed by the CPU.\n* **Blocked** (or **Waiting**): The process is waiting for some event to occur, such as I/O operation or user input.\n* **Exit** (or **Terminated**): The process has finished execution and the OS releases allocated resources [Doc: 6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf]",
+      "contexts": [
+        "Execution of Process in Five-state Model \n \nThis model consists of five states i.e, running, ready, blocked, new, and exit. The model \nworks when any new job/process occurs in the queue, it is first a",
+        "States of a Process in Operating System \nWhen a process is executed, it goes through different states during its lifetime. These \nstates represent the current activity of the process. \n1\ufe0f New \n\u2022 The p",
+        "\u2022 Waiting in the ready queue for CPU allocation.3\ufe0f\n\nRunning\n\n\u2022 The process is currently being executed by the CPU.\n\n\u2022 Only one process per CPU can be in running state at a time.4\ufe0f\n\nWaiting (Blocked)\n\n",
+        "\u2022 Assigns CPU for execution\n\n\ud83d\udd39 Multiple Processes from Same Program\n\nOne program can create multiple processes.\n\nExample:\u2022 Multiple users opening the same web browser.\n\n\u2022 Opening multiple instances of",
+        "after that it goes in the ready state. Now in the Ready state, the process goes in the running\n\nstate. In the running state, a process has two conditions i.e., either the process goes to the\n\nevent wa",
+        "processes. \nTerminologies used in Process Control Block \n\u2022 Process state: Stores whether the process is running, waiting, ready, or terminated \n\u2022 Process number Or PID: Every process is assigned a uni"
+      ],
+      "ground_truth": "New, Ready, Running, Waiting (Blocked), and Terminated (Exit).",
+      "confidence": 1.0,
+      "answer_type": "grounded",
+      "sources": [
+        "fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx",
+        "6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf"
+      ]
+    },
+    {
+      "question": "What does the Running state of a process mean?",
+      "answer": "The **Running** state of a process means that the process is currently being executed by the **CPU**. In this state, a process has two conditions: \n* It may go to the **event wait** or \n* It may get a **time-out** [Doc: 6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf]",
+      "contexts": [
+        "after that it goes in the ready state. Now in the Ready state, the process goes in the running\n\nstate. In the running state, a process has two conditions i.e., either the process goes to the\n\nevent wa",
+        "Execution of Process in Five-state Model \n \nThis model consists of five states i.e, running, ready, blocked, new, and exit. The model \nworks when any new job/process occurs in the queue, it is first a",
+        "States of a Process in Operating System \nWhen a process is executed, it goes through different states during its lifetime. These \nstates represent the current activity of the process. \n1\ufe0f New \n\u2022 The p",
+        "\u2022 Ready -> Running: The OS now selects a process for a run and the system chooses \nonly one process in a ready state for execution. \n\u2022 Running -> Exit: The system terminates a process if the process i",
+        "performs some maintenance or other functions periodically. \n\u2022 Running -> Blocked: A process is put in the blocked state if it requests for \nsomething it is waiting. Like, a process may request some re",
+        "event wait or the process gets a time-out.  \nIf the process has timed out, then the process again goes to the ready state as the process \nhas not completed its execution. If a process has an event wai"
+      ],
+      "ground_truth": "The process is currently being executed by the CPU. Only one process per CPU can be in the running state at a time.",
+      "confidence": 0.864,
+      "answer_type": "grounded",
+      "sources": [
+        "fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx",
+        "6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf"
+      ]
+    },
+    {
+      "question": "What triggers a transition from Running to Waiting state?",
+      "answer": "* A process requests something it is waiting for, such as:\n  * Resources that are not available at the time\n  * An I/O operation\n  * Another process to finish before it can continue [Doc: fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx] \n  * **Event wait** condition [Doc: 6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf]",
+      "contexts": [
+        "after that it goes in the ready state. Now in the Ready state, the process goes in the running\n\nstate. In the running state, a process has two conditions i.e., either the process goes to the\n\nevent wa",
+        "event wait or the process gets a time-out.  \nIf the process has timed out, then the process again goes to the ready state as the process \nhas not completed its execution. If a process has an event wai",
+        "\u2022 New -> Ready: The system will move the process from new to ready state and now\n\nit is ready for execution. Here a system may set a limit so that multiple processes\n\ncan't occur otherwise there may b",
+        "\u2022 Only one process per CPU can be in running state at a time. \n \n4\ufe0f Waiting (Blocked) \n\u2022 The process is waiting for some event to occur. \n\u2022 Example: Waiting for I/O operation, file access, or user inp",
+        "\u2022 Ready -> Running: The OS now selects a process for a run and the system chooses \nonly one process in a ready state for execution. \n\u2022 Running -> Exit: The system terminates a process if the process i",
+        "something it is waiting. Like, a process may request some resources that might not\n\nbe available at the time or it may be waiting for an I/O operation or waiting for some\n\nother process to finish befo"
+      ],
+      "ground_truth": "The process moves to Waiting when it requests I/O, file access, or waits for user input.",
+      "confidence": 0.858,
+      "answer_type": "grounded",
+      "sources": [
+        "fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx",
+        "6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf"
+      ]
+    },
+    {
+      "question": "What is a Process Control Block (PCB) and what does it store?",
+      "answer": "A **Process Control Block (PCB)** is a data structure used by the operating system to keep track of process information and manage execution. It stores details such as:\n* **Process state**: running, waiting, ready, or terminated\n* **Process ID (PID)**: a unique ID for identification\n* **Program counter**: the address of the next instruction to be executed\n* **Register values**: stored when a process is swapped out and retrieved when scheduled to run\n* **Memory limits**: information about memory management system used by the OS\n* **Open files**: a list of files opened for a process\n* **Scheduling info**: information for process scheduling\n* **Stack pointer**: a pointer to the stack used by the process\n* **CPU quantum**: the amount of CPU time allocated to a process\n* **Process priority**: the priority of a process [Doc: fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx] [Doc: 6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf]",
+      "contexts": [
+        "blocked state the CPU stays idle until at least one process leaves the waiting state.\n\nProcess Control Block in OS\n\nA Process Control Block (PCB) is a data structure used by the operating system to ke",
+        "processes. \nTerminologies used in Process Control Block \n\u2022 Process state: Stores whether the process is running, waiting, ready, or terminated \n\u2022 Process number Or PID: Every process is assigned a uni",
+        "Disadvantages \n\u2022 If a process gets terminated or exit from the OS, its data is not preserved by the OS. \n\u2022 There can be a performance issue as in a situation where each process goes to a \nblocked stat",
+        "process execution \n\u2022 Each process is given a unique Process ID (PID) for identification. \n\u2022 The PCB stores details such as process state, program counter, stack pointer, open \nfiles, and scheduling in",
+        "\u2022 Process number Or PID: Every process is assigned a unique id known as process ID\n\nor PID.\n\n\u2022 Program counter: Program Counter stores the address of the next instruction that\n\nis to be executed for t",
+        "\u2022 It can be created by: \no System initialization \no User request \no Batch job \no Another process (parent process) \nSteps involved: \n\u2022 Assign Process ID (PID) \n\u2022 Allocate memory \n\u2022 Initialize Process C"
+      ],
+      "ground_truth": "A PCB is a data structure used by the OS to track process information. It stores process state, PID, program counter, register values, memory limits, CPU quantum, priority, and list of open files.",
+      "confidence": 1.0,
+      "answer_type": "grounded",
+      "sources": [
+        "fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx",
+        "6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf"
+      ]
+    },
+    {
+      "question": "What happens after a process terminates?",
+      "answer": "After a process terminates, the following occur:\n* **Memory** and resources are released.\n* **PCB (Process Control Block)** is deleted [Doc: 6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf] [Doc: fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx]",
+      "contexts": [
+        "\ud83d\udd39 3\ufe0f Process Waiting (Blocking) \n\u2022 If a process needs I/O or some resource, it moves to waiting state. \n\u2022 After completion of I/O, it returns to ready state. \n \n\ud83d\udd39 4\ufe0f Process Termination \nA process ter",
+        "\u2022 After completion of I/O, it returns to ready state.\n\n\ud83d\udd39 4\ufe0f Process Termination\n\nA process terminates when:\n\n\u2022 It completes execution normally.\n\n\u2022 It encounters an error.\n\n\u2022 It is terminated by anothe",
+        "event wait or the process gets a time-out.  \nIf the process has timed out, then the process again goes to the ready state as the process \nhas not completed its execution. If a process has an event wai",
+        "\u2022 Ready -> Running: The OS now selects a process for a run and the system chooses \nonly one process in a ready state for execution. \n\u2022 Running -> Exit: The system terminates a process if the process i",
+        "after that it goes in the ready state. Now in the Ready state, the process goes in the running\n\nstate. In the running state, a process has two conditions i.e., either the process goes to the\n\nevent wa",
+        "\u2022 New -> Ready: The system will move the process from new to ready state and now\n\nit is ready for execution. Here a system may set a limit so that multiple processes\n\ncan't occur otherwise there may b"
+      ],
+      "ground_truth": "Memory and resources are released, and the PCB is deleted.",
+      "confidence": 0.851,
+      "answer_type": "grounded",
+      "sources": [
+        "fc0ea83d-d959-4045-ac5c-7628ca4de812_OS_Notes_New.docx",
+        "6d2e9625-2d11-4db3-a6cc-84d2ec753ed1_OS_Notes.pdf"
+      ]
+    }
+  ]
+}
