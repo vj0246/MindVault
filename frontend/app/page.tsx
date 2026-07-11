@@ -917,7 +917,20 @@ export default function Home() {
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [onboardingRequired, setOnboardingRequired] = useState(false)
-  const [preferences, setPreferences] = useState<PreferencesState>(DEFAULT_PREFERENCES)
+  // Lazy initializer reads the cached theme so this starts matching what
+  // layout.tsx's inline script already painted. Without this, preferences
+  // always started from DEFAULT_PREFERENCES ('Light'), and the effect below
+  // fired on mount with that default -- immediately overwriting the
+  // correct cached theme back to light, then correcting again once
+  // getPreferences() resolved seconds later. That round-trip was the
+  // flash, every single load, regardless of the cache.
+  const [preferences, setPreferences] = useState<PreferencesState>(() => {
+    try {
+      const cachedTheme = localStorage.getItem('mv_theme')
+      if (cachedTheme === 'dark') return { ...DEFAULT_PREFERENCES, theme: 'Dark' }
+    } catch { /* ignore */ }
+    return DEFAULT_PREFERENCES
+  })
   const [showMemory, setShowMemory] = useState(false)
   const [showDocManager, setShowDocManager] = useState(false)
   const [memoryNotes, setMemoryNotes] = useState<MemoryNote[]>([])
@@ -1208,7 +1221,15 @@ export default function Home() {
         answer_type: done.answer_type ?? m.answer_type,
         tokens: done.tokens,
       } : m))
-      if (done.tokens?.daily_used) setDailyTokenPct(done.tokens.daily_pct)
+      // Was gated on `daily_used` being truthy, so cache hits, empty-vault
+      // replies, and compare/summarize/test intents (all correctly report
+      // daily_used: 0 -- no new tokens spent) silently skipped the update
+      // instead of showing 0/unchanged. That left the meter stuck on
+      // whatever the last "real" grounded generation reported, or never
+      // shown at all (stays null) if the session's first reply happened
+      // to be one of those paths. Update on any tokens payload, not just
+      // a truthy count.
+      if (done.tokens) setDailyTokenPct(done.tokens.daily_pct ?? 0)
       setLoading(false)
     }
     const onError = (err: string) => {

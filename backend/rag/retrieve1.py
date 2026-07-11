@@ -724,12 +724,23 @@ def stream_with_attachment(question: str, attachment_text: str, attachment_name:
 
     yield f'data: {json.dumps({"type": "meta", "sources": prepared["sources"], "intent": "answer", "confidence": prepared["confidence"], "chunks": prepared["chunks"]})}\n\n'
 
+    # No StrOutputParser here (same reasoning as stream_rag) -- raw
+    # AIMessageChunks expose .usage_metadata, needed to report real token
+    # usage. This path previously used StrOutputParser and never reported
+    # tokens at all, so attachment replies never updated the usage meter.
     full_answer = ""
-    for token in (ATTACHMENT_PROMPT | llm | StrOutputParser()).stream(prepared["invoke_inputs"]):
-        full_answer += token
-        yield f'data: {json.dumps({"type": "token", "text": token})}\n\n'
+    last_usage = None
+    for chunk in (ATTACHMENT_PROMPT | llm).stream(prepared["invoke_inputs"]):
+        piece = chunk.content
+        full_answer += piece
+        if getattr(chunk, "usage_metadata", None):
+            last_usage = chunk.usage_metadata
+        yield f'data: {json.dumps({"type": "token", "text": piece})}\n\n'
 
-    yield f'data: {json.dumps({"type": "done", "related_concepts": [], "full_answer": full_answer})}\n\n'
+    total_tokens = last_usage.get("total_tokens") if last_usage else None
+    token_info = {"message": total_tokens, **record_token_usage(user_id, total_tokens)}
+
+    yield f'data: {json.dumps({"type": "done", "related_concepts": [], "full_answer": full_answer, "tokens": token_info})}\n\n'
 
 @traceable(name="query_rag", run_type="chain")
 def query_rag(question: str, history: list = [], mode: str = "default", user_id: str = None, document_ids: list = None) -> dict:
