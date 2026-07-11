@@ -41,20 +41,103 @@ If you read nothing else: this project demonstrates I can take a RAG system from
       └───────────────────────┘
 ```
 
-### What happens when you ask a question
+### What happens when you ask a question — the request loop
 
-This is the part most RAG tutorials skip, and it's where most of the actual engineering lives:
+This is the part most RAG tutorials skip, and it's where most of the actual engineering lives. Every step below is a real branch in the code (`backend/rag/retrieve1.py`), not a simplification — including exactly where an LLM gets called and where it deliberately doesn't.
 
-1. **Question embedded locally** via `fastembed` (BAAI/bge-small-en-v1.5, 384-dim) — no API call, runs on the Render server itself.
-2. **Two retrieval methods fire in parallel** (via `ThreadPoolExecutor`, not sequentially):
-   - **Semantic search** — cosine similarity against `pgvector`, via a Postgres RPC function (`match_chunks`)
-   - **Keyword search** — PostgreSQL full-text search (`tsvector` + GIN index, `ts_rank`, BM25-style) via a second RPC function (`keyword_search_chunks`)
-3. **Results fused with Reciprocal Rank Fusion (RRF)** — not a naive concatenation. Each chunk's score is `1/(60+rank)` per list it appears in, so a chunk that both methods agree on outranks a chunk only one method found. This is the actual fix for the classic RAG failure mode where semantic search misses exact terms (acronyms, proper nouns, numbers) and keyword search misses meaning (synonyms, paraphrases).
-4. **Cross-encoder reranking** via FlashRank (`ms-marco-MiniLM-L-12-v2`) — RRF merges by rank position; the reranker scores query-passage relevance directly by reading both texts together, which is strictly more accurate than either bi-encoder similarity or RRF score alone.
-5. **Confidence score computed** — blends normalized RRF agreement (did both methods find this?) with raw cosine similarity, 50/50, with a small bonus for multiple corroborating chunks. Surfaced to the user as a colored badge (🟢/🟡/🔴) so they can tell when the system is genuinely unsure rather than confidently hallucinating.
-6. **Context labeled per-source** (`[Doc: filename.pdf]`) and the LLM is instructed — with an explicit, repeated grounding rule, at `temperature=0` — to cite the source after every factual claim, and to say a fixed, exact phrase if the answer isn't in context. This is the actual anti-hallucination mechanism: not a hope, a structural constraint.
-7. **Answer streams token-by-token** over Server-Sent Events. The knowledge-graph lookup for "related concepts" runs on a background thread *concurrently* with the token stream, so it never adds to perceived latency.
-8. **Everything is scoped to the requesting user** — every table has a `user_id` column and a Postgres Row Level Security policy. There is no code path that can leak one user's documents into another user's answer.
+```
+                              ┌───────────────────────────┐
+                              │   User submits a question  │
+                              └─────────────┬───────────────┘
+                                            ▼
+                       ┌─────────────────────────────────────────┐
+                       │ Does it reference prior conversation     │
+              ┌───NO───│ ("that", "elaborate") OR is it <=4 words │───YES──┐
+              │        │ (likely under-specified)?                │        │
+              │        └───────────────────────────────────────────┘        │
+              ▼                                                            ▼
+   Cheap keyword-first intent                          LLM CALL #1 (optional): rewrite the
+   classify, question used as-is                       question into a fuller, standalone form
+              │                                        using conversation history + classify intent
+              └──────────────────┬─────────────────────────────┘
+                                 ▼
+              ┌───────────────────────────────────────────┐
+              │  Question embedded locally (fastembed,     │
+              │  BAAI/bge-small-en-v1.5, 384-dim) --        │
+              │  no API call, runs on the server itself     │
+              └─────────────────────┬───────────────────────┘
+                                    ▼
+      ┌─────────────────────────────────────────────────────────────┐
+      │  Semantic search (pgvector cosine, RPC match_chunks)          │
+      │  Keyword search (Postgres tsvector/GIN, RPC keyword_search)   │  <- run concurrently,
+      │  fire in parallel via ThreadPoolExecutor, not sequentially    │     not sequential awaits
+      └─────────────────────────────┬─────────────────────────────────┘
+                                    ▼
+              ┌───────────────────────────────────────────┐
+              │  Reciprocal Rank Fusion (RRF) merges both   │
+              │  ranked lists by position, not raw score --  │
+              │  a chunk both methods agree on outranks one  │
+              │  only one method found                       │
+              └─────────────────────┬───────────────────────┘
+                                    ▼
+              ┌───────────────────────────────────────────┐
+              │  Cross-encoder rerank (FlashRank, ONNX,     │
+              │  ms-marco-MiniLM-L-12-v2) -- scores query    │
+              │  and passage together, more accurate than    │
+              │  bi-encoder similarity or RRF rank alone      │
+              └─────────────────────┬───────────────────────┘
+                                    ▼
+              ┌───────────────────────────────────────────┐
+              │  Confidence score: blend of normalized RRF  │
+              │  agreement + raw cosine similarity, with a   │
+              │  bonus for multiple corroborating chunks      │
+              └─────────────────────┬───────────────────────┘
+                                    ▼
+                    ┌───────────────────────────────┐
+           BELOW 0.45│  Corrective RAG (CRAG) gate:   │ABOVE 0.45
+           ┌──────── │  is retrieval actually a real   │────────┐
+           ▼          │  match for the question?        │        ▼
+  General-knowledge   └───────────────────────────────┘   Grounded mode:
+  mode: model answers                                      STRICT RULE --
+  from its own training,                                    context ONLY,
+  must prefix reply with                                     cite [filename]
+  "[General knowledge]"                                      after every fact,
+  so the UI can flag it                                      refuse verbatim if
+  as not sourced from                                        not in context
+  your documents                                                    │
+           │                                                        │
+           └───────────────────┬────────────────────────────────────┘
+                                ▼
+              ┌───────────────────────────────────────────┐
+              │  LLM CALL #2 (always): llama-3.3-70b-       │
+              │  versatile generates the answer, streamed   │
+              │  token-by-token over SSE. Falls back to      │
+              │  llama-3.1-8b-instant automatically if the    │
+              │  70b model's daily Groq quota is exhausted     │
+              └─────────────────────┬───────────────────────┘
+                                    ▼
+                    ┌───────────────────────────────┐
+        confidence >=0.75│  Self-RAG post-check: is the    │confidence <0.75
+           ┌──────────── │  answer's own confidence high    │ ────────────┐
+           ▼              │  enough to trust the STRICT RULE  │             ▼
+   Skip verification --   │  prompting alone?                  │   LLM CALL #3: a small
+   trust the prompting,   └───────────────────────────────────┘   model (llama-3.1-8b-instant)
+   ship the answer as-is                                          re-reads the context and the
+           │                                                      generated answer, replies
+           │                                                      SUPPORTED or UNSUPPORTED --
+           │                                                      an unsupported answer gets
+           │                                                      swapped for the refusal phrase
+           └───────────────────┬────────────────────────────────────┘
+                                ▼
+              ┌───────────────────────────────────────────┐
+              │  Answer (already streamed) + confidence +   │
+              │  sources + related-concepts (knowledge-graph │
+              │  BFS, runs on its own thread concurrently      │
+              │  with the token stream, never adds latency)     │
+              └───────────────────────────────────────────┘
+```
+
+Every table involved (`chunks`, `documents`, `sessions`, `graph_nodes`, `graph_edges`) has a `user_id` column and a Postgres Row Level Security policy — there is no code path that can leak one user's documents into another user's answer.
 
 ---
 
@@ -74,6 +157,69 @@ This is the part most RAG tutorials skip, and it's where most of the actual engi
 | Hosting | Render (backend, free tier), Vercel (frontend) | Free-tier constraints (512MB RAM, shared CPU) are *why* most of the production-engineering work in this README exists |
 | Document parsing | PyPDFLoader, Docx2txtLoader, TextLoader, Groq Vision (image OCR) | One ingestion path for PDF, DOCX, TXT, MD, and images — images go through a vision LLM call instead of a separate OCR library |
 | PDF generation | fpdf2 | Human-readable session export, no headless browser needed |
+
+---
+
+## Running this locally
+
+**Prerequisites:** Python 3.11+, Node 18+, a Supabase project (Postgres + pgvector already enabled), a Groq API key.
+
+**1. Clone and set up the database**
+
+Run `backend/migrations/001_initial_schema.sql` via the Supabase SQL editor (or `supabase db push`) — creates `documents`, `chunks` (with a `vector(384)` `embedding` column and the `match_chunks`/`keyword_search_chunks` RPCs), `sessions`, `chat_sessions`, `graph_nodes`, `graph_edges`, `query_cache`, `rate_limits`, `user_preferences`, and `user_memory_notes`, plus Row Level Security policies scoping every user-facing table by `user_id`. This file is a consolidated snapshot of the live schema (most of it was built directly against the running project across earlier sessions, never previously committed) rather than a literal replay of every incremental change.
+
+**2. Backend**
+
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+Create `backend/.env`:
+
+```
+SUPABASE_URL=...
+SUPABASE_SERVICE_KEY=...
+GROQ_API_KEY=key1,key2        # comma-separated, one key is fine too
+ALLOWED_ORIGINS=http://localhost:3000
+FRONTEND_URL=http://localhost:3000
+```
+
+```bash
+uvicorn app:app --reload
+```
+
+**3. Frontend**
+
+```bash
+cd frontend
+npm install
+```
+
+Create `frontend/.env.local`:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
+
+```bash
+npm run dev
+```
+
+**4. Evaluation (optional, separate dependency set)**
+
+`ragas` needs a newer `langchain-core`/`pydantic` than nothing else in the project conflicts with, but it's still cleanest in its own venv:
+
+```bash
+cd backend
+python -m venv eval_venv
+eval_venv/Scripts/pip install -r requirements.txt -r eval/requirements_eval.txt   # Scripts/ -> bin/ on macOS/Linux
+eval_venv/Scripts/python eval/evaluate.py
+```
+
+Set `EVAL_USER_ID` in `eval/evaluate.py` to a real user whose vault has documents matching the question set first. Results land in `backend/eval/results_final/`.
 
 ---
 
@@ -106,7 +252,7 @@ This is the part most RAG tutorials skip, and it's where most of the actual engi
 - Streaming token-by-token responses over SSE
 
 **Evaluation**
-- A standalone RAGAS harness that hits the *live* deployed API (not a local re-implementation) and scores faithfulness, answer relevancy, context precision, and context recall against a hand-written question set with ground-truth answers — including adversarial questions designed to confirm the system correctly says "I don't know" rather than guessing
+- A standalone RAGAS harness that calls the RAG pipeline in-process (`rag.retrieve1.query_rag`, not an HTTP client) and scores faithfulness, answer relevancy, context precision, and context recall against a hand-written question set with ground-truth answers — including adversarial questions designed to confirm the system correctly says "I don't know" rather than guessing
 
 ---
 
@@ -122,7 +268,7 @@ The interesting part of a real project isn't the happy path, it's what got tried
 | LLM | Groq | Self-hosted Ollama | Render has no GPU; Ollama needs one to be usable |
 | Reranker | FlashRank | Cohere Rerank API | FlashRank runs locally, no extra API key, no extra network hop, no extra cost — at the cost of slightly lower ceiling accuracy than a hosted reranker |
 | Result fusion | Reciprocal Rank Fusion | Simple score concatenation / take-top-k-from-each | RRF doesn't require normalizing two incomparable score scales (cosine similarity vs. ts_rank) — it only needs rank position, which sidesteps a real bug class |
-| Eval methodology | Hit the live deployed API over HTTP | Import the RAG pipeline locally and call it directly | The production stack pins `langchain==0.3.25`; RAGAS 0.1.21 requires `langchain<0.3`. These cannot coexist in one environment. Treating eval as a black-box HTTP client sidesteps a real, unsolvable dependency conflict and — as a side effect — tests exactly what a user experiences, not an idealized local code path. |
+| Eval methodology | Import the RAG pipeline directly, in-process (`ragas>=0.4`) | Hit the live deployed API over HTTP | The first version hit the live API to sidestep a `langchain==0.3.25` vs. `ragas==0.1.21` (`langchain<0.3`) dependency conflict. Later resolved properly: `ragas>=0.4` resolves cleanly against the production `langchain`/`langchain-core` pins in an isolated venv, so eval now imports and calls `query_rag()` directly — exercises the exact current code (caching, CRAG, Self-RAG) instead of a network round-trip, and removed a hardcoded live JWT that had been committed across three prior commits. |
 | Session identity | Auto-generated sequential number for display, UUID internally | Show the raw UUID | Nobody wants to read `b90ba15b-cd41-4a0f-...` in an exported PDF. The UUID stays as the real foreign key everywhere it matters; the human gets a clean number. |
 
 ---
@@ -150,17 +296,32 @@ This is the section most portfolio RAG projects don't have, because they never r
 
 ---
 
+## Evaluation results
+
+RAGAS scores (Groq as judge LLM), same 8-question subset across all runs for a direct comparison. `context_recall`/`context_precision` measure the retrieval layer; `faithfulness`/`answer_relevancy` measure generation.
+
+| Run | faithfulness | answer_relevancy | context_precision | context_recall | overall |
+|---|---|---|---|---|---|
+| Baseline (`k=5`, all-MiniLM-L6-v2, 500-char chunks, CRAG threshold 0.35) | 0.690 | 0.864 | 0.624 | 0.563 | 0.685 |
+| `k=8`, bge-small-en-v1.5, 1000-char chunks, CRAG threshold 0.45 | 0.687 | 0.930 | 0.563 | 0.771 | 0.738 |
+| `k=6` (same embedding/chunking/threshold as above) | *pending* | *pending* | *pending* | *pending* | *pending* |
+
+Baseline → `k=8` pass: retrieval `k` (5→8), the embedding model (`all-MiniLM-L6-v2` → `bge-small-en-v1.5`, same 384-dim so no schema migration), fixed-splitter chunk size (500/50 chars → 1000/150), and the CRAG confidence gate (0.35 → 0.45) all changed together, validated as one before/after comparison rather than an exhaustive per-parameter grid search — Groq's free-tier rate limits make a full sweep impractical (a single 8-question run already takes 8-11 minutes with heavy `429` retries). Net result: `context_recall` jumped from *acceptable* to *good* (more of the right chunks actually get retrieved), at a `context_precision` cost that's the expected trade-off of pulling more candidates into the top-`k` — more chances for a weaker match to make the cut. `k=6` is a mid-point retest to see whether some of that precision can be recovered without giving back the recall gain.
+
+Raw results: `backend/eval/results_final/`.
+
+---
+
 ## What I have *not* done — and why that's worth saying
 
 A list of finished features is a sales pitch. A list of unfinished ones is engineering judgment.
 
 - **No vector index (HNSW) confirmed on the `embedding` column yet.** At current data volume this is invisible; it will become the single biggest latency bottleneck as the dataset grows past a few thousand chunks, since similarity search currently risks a sequential scan. This is the next thing I'd fix before scaling further.
-- **No LangSmith / structured tracing in production yet.** The chains are already built with LangChain primitives, so adding it is a configuration change, not a rewrite — it just hasn't been prioritized over correctness bugs yet.
-- **No HyDE (Hypothetical Document Embeddings).** Would likely improve retrieval on vague or abstract questions at the cost of one extra LLM call per query — a deliberate latency/accuracy trade-off I haven't made yet.
-- **No per-user rate limiting.** Right now a single user could exhaust the shared Groq quota for everyone. This is a real gap, not an oversight — it's next on the list.
-- **No response caching.** Identical repeated questions re-run the full pipeline every time.
-- **Synchronous ingestion.** Large document uploads block the HTTP request for the full duration of chunking and embedding rather than queuing the work and returning immediately.
-- **Still on free-tier hosting.** Render's free tier (512MB RAM, shared CPU, cold starts) shaped a large amount of the engineering described above. A meaningful fraction of the remaining latency is infrastructure, not code — and I'd say that plainly in an interview rather than implying the code is the only lever.
+- **No HyDE (Hypothetical Document Embeddings).** Would likely improve retrieval further on vague or abstract questions at the cost of one extra LLM call per query. Partially addressed by a cheaper alternative instead: short/vague questions (<=4 words) already trigger a query-rewrite pass before retrieval, but a full HyDE-style hypothetical-answer expansion hasn't been built.
+- **Still on free-tier hosting.** Render's free tier (512MB RAM, shared single vCPU, cold starts) shaped a large amount of the engineering described above — including a real production incident where a large document's embedding batch got the container OOM-killed mid-ingestion, fixed by sub-batching the embedding calls instead of one giant call per document. A meaningful fraction of the remaining latency is infrastructure, not code — and I'd say that plainly in an interview rather than implying the code is the only lever.
+- **Hyperparameters (retrieval `k`, chunk size, CRAG confidence threshold) are reasoned defaults, not exhaustively grid-searched.** Validated via before/after RAGAS comparisons (see *Evaluation results* below), but a full sweep across every combination isn't practical against Groq's free-tier rate limits — a single 8-question eval run already takes 8-11 minutes with heavy `429` retries.
+
+What's already built that an earlier version of this README claimed wasn't: per-user *and* per-IP rate limiting (`security/rate_limit.py`), response caching for repeated non-follow-up questions (`rag/cache.py`), fully asynchronous ingestion via `BackgroundTasks` with a hard 5-minute timeout (a stuck parse/embed job gets cleaned up instead of leaving a zombie row forever), and LangSmith tracing (`@traceable` on every retrieval/generation function). Keeping this list honest matters more than keeping it long.
 
 ---
 
